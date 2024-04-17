@@ -1,9 +1,11 @@
 from coinbase import jwt_generator
-# from app import create_app
-from models.signals import AuroxSignal
-from db import db, db_errors
+from models.signals import AuroxSignal, FuturePriceAtSignal
+from models.futures import CoinbaseFuture
+from db import db, db_errors, or_
 from dotenv import load_dotenv
 from pprint import pprint as pp
+import datetime
+import pytz
 import os
 import http.client
 import json
@@ -14,6 +16,8 @@ load_dotenv()
 API_KEY = os.getenv('API_KEY')
 API_SECRET = os.getenv('API_SECRET')
 UUID = os.getenv('UUID')
+
+
 # print("UUID:", UUID)
 # print("API_KEY:", API_KEY)
 
@@ -37,11 +41,12 @@ UUID = os.getenv('UUID')
 
 class CoinbaseAdvAPI:
 
-    def __init__(self):
+    def __init__(self, flask_app):
         print(":Initializing CoinbaseAdvAPI:")
 
         # Assign the initial http connection
         self.conn = http.client.HTTPSConnection("api.coinbase.com")
+        self.flask_app = flask_app
 
     @staticmethod
     def jwt_authorization_header(method, path):
@@ -64,14 +69,14 @@ class CoinbaseAdvAPI:
         """
         Be sure to path the same request method and API url (path) to both the JWT and the API call
         """
-        print(":cb_api_call:")
+        # print(":cb_api_call:")
 
         # Check to see if we have a payload, otherwise assign it empty
         if payload_param is not None:
             payload = payload_param
         else:
             payload = ''
-        print("payload:", payload)
+        # print("payload:", payload)
 
         # Make the API request
         self.conn.request(method, path, payload, p_headers)
@@ -96,11 +101,120 @@ class CoinbaseAdvAPI:
     #     # Get Accounts
     #     request_path = "/api/v3/brokerage/accounts"
 
-    # def get_products(self):
-    #     print(":get_products:")
     #
-    #     # Get Products
-    #     request_path = "/api/v3/brokerage/products"
+
+    def list_products(self, product_type="FUTURE"):
+        print(":list_products:")
+
+        request_method = "GET"
+
+        # List Products
+        request_path = "/api/v3/brokerage/products"
+        headers = self.jwt_authorization_header(request_method, request_path)
+
+        request_path = f"/api/v3/brokerage/products?product_type={product_type}"
+        get_products = self.cb_api_call(headers, request_method, request_path)
+        # print("get_products:", get_products)
+
+        return get_products
+
+    def filter_and_store_btc_futures(self, future_products):
+        print(":filter_and_store_btc_futures:")
+        # print("future_products:", future_products, type(future_products))
+
+        for future in future_products['products']:
+            # print("future product:", future)
+            if 'BTC' in future['future_product_details']['contract_root_unit']:
+                # print("future product:", future)
+
+                with self.flask_app.app_context():  # Push an application context
+                    try:
+                        # Convert necessary fields
+                        product_id = future['product_id']
+                        price = float(future['price']) if future['price'] else None
+                        price_change_24h = float(future['price_percentage_change_24h']) if future[
+                            'price_percentage_change_24h'] else None
+                        volume_24h = float(future['volume_24h']) if future['volume_24h'] else None
+                        volume_change_24h = float(future['volume_percentage_change_24h']) if future[
+                            'volume_percentage_change_24h'] else None
+                        contract_expiry = datetime.datetime.strptime(
+                            future['future_product_details']['contract_expiry'], "%Y-%m-%dT%H:%M:%SZ")
+                        contract_size = float(future['future_product_details']['contract_size'])
+
+                        # Check if the future product already exists in the database
+                        future_entry = CoinbaseFuture.query.filter_by(product_id=product_id).first()
+                        # print("\nfound future_entry:", future_entry)
+
+                        # If it doesn't exist, create the new record using just product_id
+                        if not future_entry:
+                            # print("\nno future entry found, adding it")
+                            future_entry = CoinbaseFuture(product_id=future['product_id'])
+                            db.session.add(future_entry)
+
+                        # Set or update all fields
+                        future_entry.price = price
+                        future_entry.price_change_24h = price_change_24h
+                        future_entry.volume_24h = volume_24h
+                        future_entry.volume_change_24h = volume_change_24h
+                        future_entry.display_name = future['display_name']
+                        future_entry.product_type = future['product_type']
+                        future_entry.contract_expiry = contract_expiry
+                        future_entry.contract_size = contract_size
+                        future_entry.contract_root_unit = future['future_product_details']['contract_root_unit']
+                        future_entry.venue = future['future_product_details']['venue']
+                        future_entry.status = future['status']
+                        future_entry.trading_disabled = future['trading_disabled']
+
+                        db.session.commit()
+                    except Exception as e:
+                        print(f"Failed to add future product {future['product_id']}: {e}")
+                        db.session.rollback()
+
+    @staticmethod
+    def get_short_month_uppercase():
+        # Get the current datetime
+        current_date = datetime.datetime.now()
+
+        # Format the month to short format and convert it to uppercase
+        short_month = current_date.strftime('%b').upper()
+
+        return short_month
+
+    def get_this_months_future(self):
+        print(":get_this_months_future:")
+
+        # Find this months future product
+        with self.flask_app.app_context():
+            # Get the current month's short name in uppercase
+            short_month = self.get_short_month_uppercase()
+            # print(f"Searching for futures contracts for the month: {short_month}")
+
+            # Search the database for a matching futures contract
+            future_entry = CoinbaseFuture.query.filter(
+                CoinbaseFuture.display_name.contains(short_month)
+            ).first()
+
+            if future_entry:
+                # print("\nFound future entry:", future_entry)
+                return future_entry
+            else:
+                print("\n   No future entry found for this month.")
+                return None
+
+    def get_product(self, product_id="BTC-USDT"):
+        print(":get_product:")
+
+        request_method = "GET"
+
+        # Get Product
+        request_path = f"/api/v3/brokerage/products/{product_id}"
+
+        headers = self.jwt_authorization_header(request_method, request_path)
+
+        get_product = self.cb_api_call(headers, request_method, request_path)
+        # print("get_product:", get_product)
+
+        return get_product
 
     def list_and_get_portfolios(self):
         print(":list_and_get_portfolios:")
@@ -176,57 +290,23 @@ class CoinbaseAdvAPI:
         #     print("list future avg_entry_price:", future['avg_entry_price'])
         #     print("list future unrealized_pnl:", future['unrealized_pnl'])
         #     print("list future number_of_contracts:", future['number_of_contracts'])
-        #
-        #     product_id = future['product_id']
-        #     print("product_id:", product_id)
-        #
-        #     # Get Futures Position
-        #     get_futures_pos_path = f"/api/v3/brokerage/cfm/positions/{product_id}"
-        #     print("get_futures_pos_path:", get_futures_pos_path)
-        #
-        #     headers = self.jwt_authorization_header(request_method, get_futures_pos_path)
-        #     get_futures_positions = self.cb_api_call(headers, request_method, get_futures_pos_path)
-        #     print("get_futures_positions:", get_futures_positions)
 
         return list_futures_positions
 
-    def get_future_positions(self):
+    def get_future_positions(self, product_id):
         print(":get_future_positions:")
 
         request_method = "GET"
 
-        # List Futures Positions
-        list_futures_pos_path = "/api/v3/brokerage/cfm/positions"
+        # Get Futures Position
+        get_futures_pos_path = f"/api/v3/brokerage/cfm/positions/{product_id}"
+        print("get_futures_pos_path:", get_futures_pos_path)
 
-        headers = self.jwt_authorization_header(request_method, list_futures_pos_path)
-        # print("headers:", headers)
+        headers = self.jwt_authorization_header(request_method, get_futures_pos_path)
+        get_futures_positions = self.cb_api_call(headers, request_method, get_futures_pos_path)
+        print("get_futures_positions:", get_futures_positions)
 
-        list_futures_positions = self.cb_api_call(headers, request_method, list_futures_pos_path)
-        # print("list_futures_positions", list_futures_positions)
-
-        # for future in list_futures_positions['positions']:
-        #     # print("list future:", future)
-        #     # print("list future product_id:", future['product_id'])
-        #     print("list future expiration_time:", future['expiration_time'])
-        #     print("list future number_of_contracts:", future['number_of_contracts'])
-        #     print("list future side:", future['side'])
-        #     print("list future current_price:", future['current_price'])
-        #     print("list future avg_entry_price:", future['avg_entry_price'])
-        #     print("list future unrealized_pnl:", future['unrealized_pnl'])
-        #     print("list future number_of_contracts:", future['number_of_contracts'])
-        #
-        #     product_id = future['product_id']
-        #     print("product_id:", product_id)
-        #
-        #     # Get Futures Position
-        #     get_futures_pos_path = f"/api/v3/brokerage/cfm/positions/{product_id}"
-        #     print("get_futures_pos_path:", get_futures_pos_path)
-        #
-        #     headers = self.jwt_authorization_header(request_method, get_futures_pos_path)
-        #     get_futures_positions = self.cb_api_call(headers, request_method, get_futures_pos_path)
-        #     print("get_futures_positions:", get_futures_positions)
-
-        return list_futures_positions
+        return get_futures_positions
 
     def get_futures_balance_summary(self):
         print(":get_futures_balance_summary:")
@@ -299,8 +379,28 @@ class CoinbaseAdvAPI:
 
         return get_orders
 
-    def get_current_price(self, p_product_id):
-        print(":get_current_price:")
+    def get_current_bid_ask_prices(self, p_product_id):
+        print(":get_current_future_price:")
+
+        request_method = "GET"
+
+        # Get Best Bid/Ask
+        request_path = "/api/v3/brokerage/best_bid_ask"
+        # print("request_path:", request_path)
+
+        headers = self.jwt_authorization_header(request_method, request_path)
+        # print("headers:", headers)
+
+        url_query = f"?product_ids={p_product_id}"
+
+        # Add all the options to the main API call
+        request_path = f"/api/v3/brokerage/best_bid_ask{url_query}"
+        # print("request_path:", request_path)
+
+        get_bid_ask = self.cb_api_call(headers, request_method, request_path)
+        # print("get_bid_ask", get_bid_ask)
+
+        return get_bid_ask
 
     @staticmethod
     def generate_uuid4():
@@ -410,7 +510,7 @@ class TradeManager:
     def __init__(self, flask_app):
         print(":Initializing TradeManager:")
         self.flask_app = flask_app
-        self.cb_adv_api = CoinbaseAdvAPI()
+        self.cb_adv_api = CoinbaseAdvAPI(flask_app)
 
     def handle_aurox_signal(self, signal, product_id):
         print(":handle_aurox_signal:")
@@ -432,55 +532,107 @@ class TradeManager:
         print(":write_db_signal:")
 
         # Create a new AuroxSignal object from received data
+        # Also write a record using the signal spot price, futures bid and ask
+        #   and store the relationship ids to both
         with self.flask_app.app_context():  # Push an application context
             try:
+                signal_spot_price = data['price'].replace(',', '')
+
                 new_signal = AuroxSignal(
                     timestamp=data['timestamp'],
-                    price=data['price'].replace(',', ''),  # Remove commas for numeric processing if necessary
+                    price=signal_spot_price,  # Remove commas for numeric processing if necessary
                     signal=data['signal'],
                     trading_pair=data['trading_pair'],
                     time_unit=data['timeUnit'],
-                    message=data.get('message')  # Use .get for optional fields
+                    # message=data.get('message')  # Use .get for optional fields
                 )
 
                 # Add new_signal to the session and commit it
                 db.session.add(new_signal)
-                db.session.commit()
+                # db.session.commit()
+                db.session.flush()  # Flush to assign an ID to new_signal without committing transaction
 
                 print("New signal stored:", new_signal)
+
+                #
+                # Now, get the bid and ask prices for the current futures product
+                #
+                current_future_product = self.cb_adv_api.get_this_months_future()
+                # print(" current_future_product:", current_future_product)
+                # print(" current_future_product product_id:", current_future_product.product_id)
+
+                # Get the current bid and ask prices for the futures product related to this signal
+                future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(current_future_product.product_id)
+                future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+                future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+
+                # Find the related futures product based on the current futures product
+                # Assuming the current futures product maps directly to product_id in your CoinbaseFuture model
+                if current_future_product:
+                    # Create a FuturePriceAtSignal record linking the new signal and the futures product
+                    new_future_price = FuturePriceAtSignal(
+                        signal_spot_price=signal_spot_price,
+                        future_bid_price=future_bid_price,
+                        future_ask_price=future_ask_price,
+                        signal_id=new_signal.id,
+                        future_id=current_future_product.id
+                    )
+                    db.session.add(new_future_price)
+                    print("Associated bid/ask prices stored for the signal")
+
+                db.session.commit()
 
             except db_errors as e:
                 print(f"Error fetching latest daily signal: {str(e)}")
                 return None
 
-    # def get_all_signals(self):
-    #     print(":get_all_signals:")
-    #     with self.flask_app.app_context():
-    #         signals = AuroxSignal.query.all()
-    #         return signals
-
     def get_latest_weekly_signal(self):
         print(":get_latest_weekly_signal:")
         with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query\
-                .filter(AuroxSignal.time_unit == '1 Week')\
-                .order_by(AuroxSignal.timestamp.desc())\
+            latest_signal = AuroxSignal.query \
+                .filter(AuroxSignal.time_unit == '1 Week') \
+                .order_by(AuroxSignal.timestamp.desc()) \
                 .first()
             return latest_signal
 
     def get_latest_daily_signal(self):
         print(":get_latest_daily_signal:")
         with (self.flask_app.app_context()):
-            latest_signal = AuroxSignal.query\
-                .filter(AuroxSignal.time_unit == '1 Day')\
-                .order_by(AuroxSignal.timestamp.desc())\
+            latest_signal = AuroxSignal.query \
+                .filter(AuroxSignal.time_unit == '1 Day') \
+                .order_by(AuroxSignal.timestamp.desc()) \
                 .first()
             return latest_signal
 
+    def compare_last_daily_to_todays_date(self):
+        print(":compare_last_daily_to_todays_date:")
+        latest_signal = self.get_latest_daily_signal()
+        if latest_signal:
+            # Strip the 'Z' and parse the datetime
+            signal_time = datetime.datetime.fromisoformat(latest_signal.timestamp.rstrip('Z'))
+
+            # Ensuring it's UTC
+            signal_time = signal_time.replace(tzinfo=pytz.utc)
+
+            now = datetime.datetime.now(pytz.utc)  # Current time in UTC
+
+            # Calculate time difference
+            time_diff = now - signal_time
+
+            # Check if the difference is less than or equal to 24 hours
+            if time_diff <= datetime.timedelta(days=1):
+                print("Within 24 hours, proceed to place trade.")
+                return True
+            else:
+                print("More than 24 hours since the last signal, wait for the next one.")
+        else:
+            print("No daily signal found.")
+
 
 if __name__ == "__main__":
+    print(__name__)
 
-    cb_adv_api = CoinbaseAdvAPI()
+    # cb_adv_api = CoinbaseAdvAPI()
 
     # get_bal_summary = cb_adv_api.get_futures_balance_summary()
     # pp(get_bal_summary)
@@ -488,8 +640,8 @@ if __name__ == "__main__":
     # list_future_positions = cb_adv_api.list_and_get_future_positions()
     # pp(list_future_positions)
 
-    new_order = cb_adv_api.create_order("BUY", "BIT-26APR24-CDE", 1)
-    pp(new_order)
-
-    new_order = cb_adv_api.create_order("SELL", "BIT-26APR24-CDE", 1)
-    pp(new_order)
+    # new_order = cb_adv_api.create_order("BUY", "BIT-26APR24-CDE", 1)
+    # pp(new_order)
+    #
+    # new_order = cb_adv_api.create_order("SELL", "BIT-26APR24-CDE", 1)
+    # pp(new_order)

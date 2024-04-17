@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_migrate import Migrate
 from db import db
 from pprint import pprint as pp
-from trade_manager import TradeManager
+from trade_manager import TradeManager, CoinbaseAdvAPI
 
 
 def create_app():
@@ -12,6 +12,7 @@ def create_app():
 
     db.init_app(flask_app)
     migrate = Migrate(flask_app, db)
+    print("migrate:", migrate)
 
     with flask_app.app_context():
         db.create_all()
@@ -21,7 +22,9 @@ def create_app():
 
 app = create_app()
 
+cbapi = CoinbaseAdvAPI(app)
 tm = TradeManager(app)
+
 
 # NOTE: Need to figure out the trading logic here with orders
 #   Following Aurox guides, we should only be taking signals on the Weekly and maybe daily
@@ -44,11 +47,8 @@ tm = TradeManager(app)
 def index():
     print(":index:")
 
-    # result = cb_api()
-    # return jsonify(msg)
-
     if request.method == 'GET':
-        return '<h1>HELLO WORD</h1>'
+        return "Its a bit empty here..."
 
     # if request.method == 'POST':
     #     data = request.json
@@ -59,9 +59,9 @@ def index():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     print(":webhook:")
+
     # Parse the incoming JSON data
     data = request.json
-    # print("Received signal:", data)
 
     print("\nReceived signal:")
     pp(data)
@@ -71,29 +71,13 @@ def webhook():
 
     tm.handle_aurox_signal(data['signal'], data['symbol'])
 
-    # Create a new AuroxSignal object from received data
-    # new_signal = AuroxSignal(
-    #     timestamp=data['timestamp'],
-    #     price=data['price'].replace(',', ''),  # Remove commas for numeric processing if necessary
-    #     signal=data['signal'],
-    #     symbol=data['symbol'],
-    #     time_unit=data['timeUnit'],
-    #     message=data.get('message')  # Use .get for optional fields
-    # )
-    #
-    # # Add new_signal to the session and commit it
-    # db.session.add(new_signal)
-    # db.session.commit()
-    #
-    # print("New signal stored:", new_signal)
-
     signal_data = {
-        'timestamp':data['timestamp'],
+        'timestamp': data['timestamp'],
         'price': data['price'].replace(',', ''),  # Remove commas for numeric processing if necessary
         'signal': data['signal'],
         'trading_pair': data['symbol'],
         'timeUnit': data['timeUnit'],
-        'message': data.get('message')  # Use .get for optional fields
+        # 'message': data.get('message')  # Use .get for optional fields
     }
 
     tm.write_db_signal(signal_data)
@@ -101,6 +85,18 @@ def webhook():
     # Respond back to the webhook sender to acknowledge receipt
     return jsonify({"status": "success", "message": "Signal received"}), 200
 
+
+#######################
+# Get the latest Weekly and Daily signals, then
+# compare the Daily to today's date. Do we need to know this?
+
+# TODO: Now we know if we're within range of the last Daily
+#   and should have placed an order (market?)
+#   Do we then place some limit orders for spikes or bounces?
+
+# TODO: Should we do the DCA limit orders, then track the DCA with
+#   placing a moving limit order for the opposing side to take profit?
+#######################
 
 # weekly_signals = tm.get_latest_weekly_signal()
 # daily_signals = tm.get_latest_daily_signal()
@@ -116,6 +112,31 @@ def webhook():
 # print("daily_signals: signal", daily_signals.timestamp)
 # print("daily_signals: signal", daily_signals.price)
 # print("daily_signals: signal", daily_signals.signal)
+
+# compare_daily = tm.compare_last_daily_to_todays_date()
+# print("compare_daily:", compare_daily)
+
+#######################
+# Get the the future products for BTC and store in DB
+# Then using this months future product, get the bid and ask prices
+# TODO: This should run once a day in the morning
+#######################
+
+list_future_products = cbapi.list_products("FUTURE")
+# pp(list_future_products)
+
+cbapi.filter_and_store_btc_futures(list_future_products)
+
+current_future_product = cbapi.get_this_months_future()
+# print(" current_future_product:", current_future_product)
+
+bid_ask_price = cbapi.get_current_bid_ask_prices(current_future_product.product_id)
+# pp(bid_ask_price)
+# bid_price = bid_ask_price['pricebooks'][0]['bids'][0]['price']
+# ask_price = bid_ask_price['pricebooks'][0]['asks'][0]['price']
+# print("bid_price:", bid_price)
+# print("ask_price:", ask_price)
+
 
 if __name__ == '__main__':
     print(":", __name__, ":")

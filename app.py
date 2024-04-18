@@ -2,7 +2,8 @@ from flask import Flask, request, jsonify
 from flask_migrate import Migrate
 from db import db
 from pprint import pprint as pp
-from trade_manager import TradeManager, CoinbaseAdvAPI
+from trade_manager import  CoinbaseAdvAPI
+from trade_manager import TradeManager
 
 
 def create_app():
@@ -32,13 +33,13 @@ tm = TradeManager(app)
 #   We should store each Weekly and Daily signal in the database to help track where we're at
 #   While were in a Weekly Long or Short and the Futures closes for that month, we should
 #   Re-open a Long or Short based on the signal. We only reverse once the opposing Weekly signal
-#   comes into play. So this is a long game.
+#   comes into play. This is a long game.
 
 # NOTE:
 #   Perhaps one way we operate is if the Weekly is long, use the Daily Aurox signals for
 #   longs only and close out after expiration or a certain percentage to minimize risk (10%?).
 #   Then keep opening Daily longs per each indicator while under the Weekly long. perhaps we wait
-#   for a duration or percentage from the last signal, or a reverse Daily signal before placing an order
+#   for a duration or percentage from the last signal, or a reverse Daily signal before placing a close order.
 
 # NOTE: Should we do laddering with orders to caught spikes and other liquidations or quick reversals?
 
@@ -98,6 +99,11 @@ def webhook():
 #   placing a moving limit order for the opposing side to take profit?
 #######################
 
+#######################
+# porfolios = cbapi.list_and_get_portfolios()
+# print("porfolios:", porfolios)
+#######################
+
 # weekly_signals = tm.get_latest_weekly_signal()
 # daily_signals = tm.get_latest_daily_signal()
 
@@ -119,23 +125,38 @@ def webhook():
 #######################
 # Get the the future products for BTC and store in DB
 # Then using this months future product, get the bid and ask prices
-# TODO: This should run once a day in the morning
+# TODO: This should run once a day in the morning.
+#  Setup as a Pythonanywhere cron task within a Flask route
+# list_future_products = cbapi.list_products("FUTURE")
+# pp(list_future_products)
+# cbapi.store_btc_futures_products(list_future_products)
 #######################
 
-list_future_products = cbapi.list_products("FUTURE")
-# pp(list_future_products)
+#######################
+# check_contract_expiration = tm.check_for_contract_expires()
+# print(check_contract_expiration)
+#######################
 
-cbapi.filter_and_store_btc_futures(list_future_products)
+#######################
+# Balance Summary get and store
+# futures_balance = cbapi.get_balance_summary()
+# pp(futures_balance)
+# cbapi.store_futures_balance_summary(futures_balance)
+#######################
 
-current_future_product = cbapi.get_this_months_future()
-# print(" current_future_product:", current_future_product)
+#######################
+# List Orders
+# future_product = cbapi.get_this_months_future()
+# open_orders = cbapi.list_orders(product_id=future_product.product_id, order_status="OPEN")
+# pp(open_orders)
+#######################
 
-bid_ask_price = cbapi.get_current_bid_ask_prices(current_future_product.product_id)
-# pp(bid_ask_price)
-# bid_price = bid_ask_price['pricebooks'][0]['bids'][0]['price']
-# ask_price = bid_ask_price['pricebooks'][0]['asks'][0]['price']
-# print("bid_price:", bid_price)
-# print("ask_price:", ask_price)
+#######################
+# Get Current Positions
+future_positions = cbapi.list_future_positions()
+# pp(future_positions)
+cbapi.store_future_positions(future_positions)
+#######################
 
 
 if __name__ == '__main__':

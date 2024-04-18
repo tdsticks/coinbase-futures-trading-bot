@@ -8,16 +8,20 @@ This project develops a trading bot that utilizes Aurox (Ax) signals to strategi
 trade BTC futures on Coinbase Financial Markets. Designed for long-term trading, it 
 leverages Weekly and Daily signals to optimize trading decisions within the constraints
 of monthly futures contracts. This approach emphasizes financial patience, allowing
-trades to mature fully based on the prevailing market conditions signaled by Ax. 
+trades to mature fully based on the prevailing market conditions signaled by the Aurox Indicator. 
 The bot adapts to the complexities of contract expirations, starting with a simple
 strategy and evolving to incorporate advanced trading maneuvers like Dollar-Cost 
 Averaging (DCA) and dynamic order adjustments.
 
-> **Disclaimer**: Trading cryptocurrencies, especially on leveraged futures markets, 
-  involves significant risks. This bot is for educational purposes only. Always review
-  and test trading strategies in controlled environments before live deployment. I am not
-  responsible for any financial losses incurred from using this software.
-
+> **Disclaimer**: Trading cryptocurrencies, especially on leveraged futures
+> markets, involves substantial risks of loss and is not suitable for every investor. 
+> The valuation of cryptocurrencies may fluctuate significantly, potentially resulting in 
+> losses exceeding your initial investment. This bot is provided as a tool to assist in 
+> trading and is intended for educational purposes only. It does not guarantee profits, 
+> and my shared experiences and strategies should not be seen as solicitations of any order 
+> to buy or sell. Always perform your due diligence and test trading strategies in controlled 
+> environments before engaging in live deployment. I am not responsible for any financial 
+> losses incurred from using this software. Trade only with capital you can afford to lose.
 
 ## Features
 - **Signal Processing**: Handles both Weekly and Daily trading signals.
@@ -77,6 +81,9 @@ Trading in futures and leveraged markets carries significant risks and requires 
 strategy and a clear understanding of potential losses and profits. Leveraged trading can result in 
 substantial gains as well as losses, including the possibility of losing more than your initial investment.
 
+> More on Coinbase Futures (CFM) Funding, Balances and Liquidations.
+[Futures Cash Balance](https://help.coinbase.com/en/coinbase/trading-and-funding/derivatives/futures-cash-balance)
+
 
 ### Personal Experience and Learning
 My personal journey in automated trading has included both successes and significant losses, which have 
@@ -107,24 +114,42 @@ Here are a few traders whose insights I've found beneficial:
   - @MooninPapa
   - @scottmelker
   - @naval
-  
-> **Disclaimer**: This bot is a tool intended to assist in trading but does not guarantee profits. Trading involves substantial risk of loss and is not suitable for every investor. The valuation of cryptocurrencies may fluctuate, and as a result, clients may lose more than their original investment. My experiences and shared strategies are not solicitations of any order to buy or sell. Therefore, you should not speculate with capital that you cannot afford to lose. I am not responsible for any losses incurred as a result of using this bot. Always perform your due diligence before making trading decisions.
 
 
-## How it works (high-level)
-This project is the middleman between Aurox and Coinbase Futures (CFM). We receive
-Weekly and Daily signals from Aurox, then determine if we should place a long or short from the Ax signal. 
-Then, create an order with Coinbase Futures. It will also check if we have any existing 
-orders so we don't accidentally close out any orders or place additional orders, unless we want them 
-(optional). We then check to see when to close out the order, are we need the EOM (end of month) or has
-a opposing-sided signal come through, which they don't occur that often in a year. Again, this a long 
-term trading strategy that requires much patience. You can read on how the Aurox Indicator works 
-here: https://docs.getaurox.com/product-docs/aurox-terminal-guides/indicator-guides/aurox-indicator
-So, that essentially it from a high-level. Obviously there's more to it and more we can do, but I wanted
-to keep things simple for now.
+## How It Works (High-Level Overview)
+This project serves as a bridge between Aurox and Coinbase Futures (CFM), harnessing both Weekly 
+and Daily trading signals from Aurox to inform our trading strategies on the CFM platform.
+
+#### Process Flow:
+1. **Receive Signals**: Initially, we collect and analyze trading signals from Aurox, determining 
+   whether to initiate a long or short position based on the Ax indicator.
+2. **Order Management**: After deciding on the trade direction, we execute orders on Coinbase 
+   Futures. Our system is designed to:
+   - Ensure that existing orders are not inadvertently closed unless specified.
+   - Evaluate the necessity of placing additional orders based on the strategy's requirements.
+3. **Order Review**: Orders are continuously monitored to decide the optimal time for closure. 
+   This could be prompted by:
+   - The approach of the end of the month (EOM), which may necessitate adjustments due to contract
+     expirations.
+   - Receipt of an opposing signal, which are infrequent but crucial for risk management.
+   - Our profit percentage has been reached. DCA may also be applied to this as well.
+
+**Strategic Considerations:** This approach is fundamentally a long-term trading strategy, 
+demanding patience and a disciplined adherence to predefined indicators and market conditions.
+
+**Further Information:** 
+For a more detailed understanding of how the Aurox Indicator guides our trading decisions, 
+please visit the
+[Aurox Indicator Guide](https://docs.getaurox.com/product-docs/aurox-terminal-guides/indicator-guides/aurox-indicator).
+
+**Summary:** At a high level, the project is streamlined yet robust, offering straightforward 
+functionalities with the potential for more complex enhancements in the future. While the 
+current setup is designed for simplicity, it lays a solid foundation for further development
+based on user feedback and market evolution.
+
 
 ## Trading Strategy
-As mentioned above in the overview and a bit in the how it works, we're working with the Aurox Indicator 
+As mentioned above in the **Overview** and a bit in the **How It Works**, we're working with the Aurox Indicator 
 as a means of when to go long or short and when to place trades. Based on Aurox's documentation from 
 their indicator, we still need to be careful as to when their indicator is confirmed or not. So the 
 method of which you setup your Aurox alerts is important. Using their default "predefined alert" is a 
@@ -158,18 +183,19 @@ looking from a large time frame.
       So this is why we need to be careful for how long we keep our trades open and when we take profits.
       > NOTE: Being greedy is dangerous and again, this is a psychological mindset you need to control. 
 
-
-
+      
 ## Setup and Installation
 Detailed steps on setting up the environment, from installing dependencies to configuring your trading
 platform connections, including API key generation and webhook setup.
 
 
 ### Coinbase Advanced API
+> **Important Security Notice:** Never commit your API keys to your repository or expose them in any public space.
 - Generate API keys via the Coinbase Advanced API portal. Ensure the keys are configured with the 
   necessary permissions for trading.
 - Store API keys securely and configure your application environment to use these keys without 
   hard-coding them in your source.
+- See [COINBASE_ADV_API.md](./COINBASE_ADV_API.md) document for more details on the API keys
 
 
 ### Aurox Configuration

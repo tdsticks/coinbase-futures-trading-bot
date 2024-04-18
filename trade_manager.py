@@ -1,6 +1,6 @@
 from coinbase import jwt_generator
 from models.signals import AuroxSignal, FuturePriceAtSignal
-from models.futures import CoinbaseFuture
+from models.futures import CoinbaseFuture, AccountBalanceSummary, FuturePosition
 from db import db, db_errors, or_
 from dotenv import load_dotenv
 from pprint import pprint as pp
@@ -28,7 +28,6 @@ UUID = os.getenv('UUID')
 # NOTE: Futures markets are open for trading from Sunday 6 PM to
 #  Friday 5 PM ET (excluding observed holidays),
 #  with a 1-hour break each day from 5 PM – 6 PM ET
-
 
 # TODO: Make coinbase into class library for importing into Flask
 # TODO: Setup trading logic
@@ -95,127 +94,6 @@ class CoinbaseAdvAPI:
         # Return the data response in JSON
         return json.loads(data.decode("utf-8"))
 
-    # def get_accounts(self):
-    #     print(":get_accounts:")
-    #
-    #     # Get Accounts
-    #     request_path = "/api/v3/brokerage/accounts"
-
-    #
-
-    def list_products(self, product_type="FUTURE"):
-        print(":list_products:")
-
-        request_method = "GET"
-
-        # List Products
-        request_path = "/api/v3/brokerage/products"
-        headers = self.jwt_authorization_header(request_method, request_path)
-
-        request_path = f"/api/v3/brokerage/products?product_type={product_type}"
-        get_products = self.cb_api_call(headers, request_method, request_path)
-        # print("get_products:", get_products)
-
-        return get_products
-
-    def filter_and_store_btc_futures(self, future_products):
-        print(":filter_and_store_btc_futures:")
-        # print("future_products:", future_products, type(future_products))
-
-        for future in future_products['products']:
-            # print("future product:", future)
-            if 'BTC' in future['future_product_details']['contract_root_unit']:
-                # print("future product:", future)
-
-                with self.flask_app.app_context():  # Push an application context
-                    try:
-                        # Convert necessary fields
-                        product_id = future['product_id']
-                        price = float(future['price']) if future['price'] else None
-                        price_change_24h = float(future['price_percentage_change_24h']) if future[
-                            'price_percentage_change_24h'] else None
-                        volume_24h = float(future['volume_24h']) if future['volume_24h'] else None
-                        volume_change_24h = float(future['volume_percentage_change_24h']) if future[
-                            'volume_percentage_change_24h'] else None
-                        contract_expiry = datetime.datetime.strptime(
-                            future['future_product_details']['contract_expiry'], "%Y-%m-%dT%H:%M:%SZ")
-                        contract_size = float(future['future_product_details']['contract_size'])
-
-                        # Check if the future product already exists in the database
-                        future_entry = CoinbaseFuture.query.filter_by(product_id=product_id).first()
-                        # print("\nfound future_entry:", future_entry)
-
-                        # If it doesn't exist, create the new record using just product_id
-                        if not future_entry:
-                            # print("\nno future entry found, adding it")
-                            future_entry = CoinbaseFuture(product_id=future['product_id'])
-                            db.session.add(future_entry)
-
-                        # Set or update all fields
-                        future_entry.price = price
-                        future_entry.price_change_24h = price_change_24h
-                        future_entry.volume_24h = volume_24h
-                        future_entry.volume_change_24h = volume_change_24h
-                        future_entry.display_name = future['display_name']
-                        future_entry.product_type = future['product_type']
-                        future_entry.contract_expiry = contract_expiry
-                        future_entry.contract_size = contract_size
-                        future_entry.contract_root_unit = future['future_product_details']['contract_root_unit']
-                        future_entry.venue = future['future_product_details']['venue']
-                        future_entry.status = future['status']
-                        future_entry.trading_disabled = future['trading_disabled']
-
-                        db.session.commit()
-                    except Exception as e:
-                        print(f"Failed to add future product {future['product_id']}: {e}")
-                        db.session.rollback()
-
-    @staticmethod
-    def get_short_month_uppercase():
-        # Get the current datetime
-        current_date = datetime.datetime.now()
-
-        # Format the month to short format and convert it to uppercase
-        short_month = current_date.strftime('%b').upper()
-
-        return short_month
-
-    def get_this_months_future(self):
-        print(":get_this_months_future:")
-
-        # Find this months future product
-        with self.flask_app.app_context():
-            # Get the current month's short name in uppercase
-            short_month = self.get_short_month_uppercase()
-            # print(f"Searching for futures contracts for the month: {short_month}")
-
-            # Search the database for a matching futures contract
-            future_entry = CoinbaseFuture.query.filter(
-                CoinbaseFuture.display_name.contains(short_month)
-            ).first()
-
-            if future_entry:
-                # print("\nFound future entry:", future_entry)
-                return future_entry
-            else:
-                print("\n   No future entry found for this month.")
-                return None
-
-    def get_product(self, product_id="BTC-USDT"):
-        print(":get_product:")
-
-        request_method = "GET"
-
-        # Get Product
-        request_path = f"/api/v3/brokerage/products/{product_id}"
-
-        headers = self.jwt_authorization_header(request_method, request_path)
-
-        get_product = self.cb_api_call(headers, request_method, request_path)
-        # print("get_product:", get_product)
-
-        return get_product
-
     def list_and_get_portfolios(self):
         print(":list_and_get_portfolios:")
 
@@ -266,50 +144,90 @@ class CoinbaseAdvAPI:
         #     for position in futures_positions:
         #         print(" position:", position, futures_positions[position])
 
-    def list_future_positions(self):
-        print(":list_future_positions:")
+    def get_product(self, product_id="BTC-USDT"):
+        print(":get_product:")
 
         request_method = "GET"
 
-        # List Futures Positions
-        list_futures_pos_path = "/api/v3/brokerage/cfm/positions"
+        # Get Product
+        request_path = f"/api/v3/brokerage/products/{product_id}"
 
-        headers = self.jwt_authorization_header(request_method, list_futures_pos_path)
-        # print("headers:", headers)
+        headers = self.jwt_authorization_header(request_method, request_path)
 
-        list_futures_positions = self.cb_api_call(headers, request_method, list_futures_pos_path)
-        # print("list_futures_positions", list_futures_positions)
+        get_product = self.cb_api_call(headers, request_method, request_path)
+        # print("get_product:", get_product)
 
-        # for future in list_futures_positions['positions']:
-        #     # print("list future:", future)
-        #     # print("list future product_id:", future['product_id'])
-        #     print("list future expiration_time:", future['expiration_time'])
-        #     print("list future number_of_contracts:", future['number_of_contracts'])
-        #     print("list future side:", future['side'])
-        #     print("list future current_price:", future['current_price'])
-        #     print("list future avg_entry_price:", future['avg_entry_price'])
-        #     print("list future unrealized_pnl:", future['unrealized_pnl'])
-        #     print("list future number_of_contracts:", future['number_of_contracts'])
+        return get_product
 
-        return list_futures_positions
-
-    def get_future_positions(self, product_id):
-        print(":get_future_positions:")
+    def list_products(self, product_type="FUTURE"):
+        print(":list_products:")
 
         request_method = "GET"
 
-        # Get Futures Position
-        get_futures_pos_path = f"/api/v3/brokerage/cfm/positions/{product_id}"
-        print("get_futures_pos_path:", get_futures_pos_path)
+        # List Products
+        request_path = "/api/v3/brokerage/products"
+        headers = self.jwt_authorization_header(request_method, request_path)
 
-        headers = self.jwt_authorization_header(request_method, get_futures_pos_path)
-        get_futures_positions = self.cb_api_call(headers, request_method, get_futures_pos_path)
-        print("get_futures_positions:", get_futures_positions)
+        request_path = f"/api/v3/brokerage/products?product_type={product_type}"
+        get_products = self.cb_api_call(headers, request_method, request_path)
+        # print("get_products:", get_products)
 
-        return get_futures_positions
+        return get_products
 
-    def get_futures_balance_summary(self):
-        print(":get_futures_balance_summary:")
+    def store_btc_futures_products(self, future_products):
+        print(":store_btc_futures_products:")
+        # print("future_products:", future_products, type(future_products))
+
+        for future in future_products['products']:
+            # print("future product:", future)
+            if 'BTC' in future['future_product_details']['contract_root_unit']:
+                # print("future product:", future)
+
+                with self.flask_app.app_context():  # Push an application context
+                    try:
+                        # Convert necessary fields
+                        product_id = future['product_id']
+                        price = float(future['price']) if future['price'] else None
+                        price_change_24h = float(future['price_percentage_change_24h']) if future[
+                            'price_percentage_change_24h'] else None
+                        volume_24h = float(future['volume_24h']) if future['volume_24h'] else None
+                        volume_change_24h = float(future['volume_percentage_change_24h']) if future[
+                            'volume_percentage_change_24h'] else None
+                        contract_expiry = datetime.datetime.strptime(
+                            future['future_product_details']['contract_expiry'], "%Y-%m-%dT%H:%M:%SZ")
+                        contract_size = float(future['future_product_details']['contract_size'])
+
+                        # Check if the future product already exists in the database
+                        future_entry = CoinbaseFuture.query.filter_by(product_id=product_id).first()
+                        # print("\nfound future_entry:", future_entry)
+
+                        # If it doesn't exist, create the new record using just product_id
+                        if not future_entry:
+                            # print("\nno future entry found, adding it")
+                            future_entry = CoinbaseFuture(product_id=future['product_id'])
+                            db.session.add(future_entry)
+
+                        # Set or update all fields
+                        future_entry.price = price
+                        future_entry.price_change_24h = price_change_24h
+                        future_entry.volume_24h = volume_24h
+                        future_entry.volume_change_24h = volume_change_24h
+                        future_entry.display_name = future['display_name']
+                        future_entry.product_type = future['product_type']
+                        future_entry.contract_expiry = contract_expiry
+                        future_entry.contract_size = contract_size
+                        future_entry.contract_root_unit = future['future_product_details']['contract_root_unit']
+                        future_entry.venue = future['future_product_details']['venue']
+                        future_entry.status = future['status']
+                        future_entry.trading_disabled = future['trading_disabled']
+
+                        db.session.commit()
+                    except Exception as e:
+                        print(f"Failed to add future product {future['product_id']}: {e}")
+                        db.session.rollback()
+
+    def get_balance_summary(self):
+        print(":get_balance_summary:")
 
         request_method = "GET"
 
@@ -344,7 +262,97 @@ class CoinbaseAdvAPI:
 
         return balance_summary
 
-    def list_orders(self, p_product_id):
+    def store_futures_balance_summary(self, data):
+        print(':store_futures_balance_summary:')
+
+        balance_summary_data = data['balance_summary']
+        # pp(balance_summary_data)
+
+        with self.flask_app.app_context():  # Push an application context
+            try:
+                # Try to find the existing balance summary, assuming only one record exists
+                existing_balance_summary = AccountBalanceSummary.query.limit(1).all()
+                # print("existing_balance_summary:", existing_balance_summary)
+
+                if existing_balance_summary:
+                    # Update existing record
+                    existing_balance_summary.available_margin = float(balance_summary_data['available_margin']['value'])
+                    existing_balance_summary.cbi_usd_balance = float(balance_summary_data['cbi_usd_balance']['value'])
+                    existing_balance_summary.cfm_usd_balance = float(balance_summary_data['cfm_usd_balance']['value'])
+                    existing_balance_summary.daily_realized_pnl = float(balance_summary_data['daily_realized_pnl']['value'])
+                    existing_balance_summary.futures_buying_power = float(balance_summary_data['futures_buying_power']['value'])
+                    existing_balance_summary.initial_margin = float(balance_summary_data['initial_margin']['value'])
+                    existing_balance_summary.liquidation_buffer_amount = float(
+                        balance_summary_data['liquidation_buffer_amount']['value'])
+                    existing_balance_summary.liquidation_buffer_percentage = int(
+                        balance_summary_data['liquidation_buffer_percentage'])
+                    existing_balance_summary.liquidation_threshold = float(
+                        balance_summary_data['liquidation_threshold']['value'])
+                    existing_balance_summary.total_open_orders_hold_amount = float(
+                        balance_summary_data['total_open_orders_hold_amount']['value'])
+                    existing_balance_summary.total_usd_balance = float(balance_summary_data['total_usd_balance']['value'])
+                    existing_balance_summary.unrealized_pnl = float(balance_summary_data['unrealized_pnl']['value'])
+                    print("Updated existing balance summary")
+                else:
+                    # Create new record if it does not exist
+                    new_balance_summary = AccountBalanceSummary(
+                        available_margin=float(balance_summary_data['available_margin']['value']),
+                        cbi_usd_balance=float(balance_summary_data['cbi_usd_balance']['value']),
+                        cfm_usd_balance=float(balance_summary_data['cfm_usd_balance']['value']),
+                        daily_realized_pnl=float(balance_summary_data['daily_realized_pnl']['value']),
+                        futures_buying_power=float(balance_summary_data['futures_buying_power']['value']),
+                        initial_margin=float(balance_summary_data['initial_margin']['value']),
+                        liquidation_buffer_amount=float(balance_summary_data['liquidation_buffer_amount']['value']),
+                        liquidation_buffer_percentage=int(balance_summary_data['liquidation_buffer_percentage']),
+                        liquidation_threshold=float(balance_summary_data['liquidation_threshold']['value']),
+                        total_open_orders_hold_amount=float(balance_summary_data['total_open_orders_hold_amount']['value']),
+                        total_usd_balance=float(balance_summary_data['total_usd_balance']['value']),
+                        unrealized_pnl=float(balance_summary_data['unrealized_pnl']['value']),
+                    )
+                    db.session.add(new_balance_summary)
+                    print("Stored new balance summary")
+
+                # Commit the changes to the database
+                db.session.commit()
+                print("Balance summary updated or created successfully.")
+            except Exception as e:
+                print(f"Failed to add/update balance summary {balance_summary_data}: {e}")
+                db.session.rollback()
+
+        print("Balance summary stored")
+
+    @staticmethod
+    def get_current_short_month_uppercase():
+        # Get the current datetime
+        current_date = datetime.datetime.now()
+
+        # Format the month to short format and convert it to uppercase
+        short_month = current_date.strftime('%b').upper()
+
+        return short_month
+
+    def get_this_months_future(self):
+        print(":get_this_months_future:")
+
+        # Find this months future product
+        with self.flask_app.app_context():
+            # Get the current month's short name in uppercase
+            short_month = self.get_current_short_month_uppercase()
+            # print(f"Searching for futures contracts for the month: {short_month}")
+
+            # Search the database for a matching futures contract
+            future_entry = CoinbaseFuture.query.filter(
+                CoinbaseFuture.display_name.contains(short_month)
+            ).first()
+
+            if future_entry:
+                # print("\nFound future entry:", future_entry)
+                return future_entry
+            else:
+                print("\n   No future entry found for this month.")
+                return None
+
+    def list_orders(self, product_id, order_status, product_type="FUTURE"):
         print(":list_orders:")
 
         request_method = "GET"
@@ -361,25 +369,143 @@ class CoinbaseAdvAPI:
 
         url_query = "?"
         # url_query += "order_status=OPEN"
-        url_query += "order_status=FILLED"
+        # url_query += "order_status=FILLED"
+        url_query += f"order_status={order_status}"
         # url_query += "&order_type=UNKNOWN_ORDER_TYPE"
         # url_query += "&side=UNKNOWN_ORDER_SIDE"
-        url_query += "&product_id=" + p_product_id
-        url_query += "&product_type=FUTURE"
+        url_query += f"&product_id={product_id}"
+        url_query += f"&product_type={product_type}"
         # url_query += "&order_placement_source=RETAIL_ADVANCED",
         # "retail_portfolio_id": "default"
 
         # Add all the options to the main API call
         request_path = "/api/v3/brokerage/orders/historical/batch" + url_query
         # /api/v3/brokerage/orders/historical/batch?product_id=BIT-26APR24-CD&order_side=BUY&product_type=FUTURE
-        print("request_path:", request_path)
+        # print("request_path:", request_path)
 
         get_orders = self.cb_api_call(headers, request_method, request_path)
-        print("get_orders", get_orders)
+        # print("get_orders", get_orders)
+        # pp(get_orders)
+
+        # Use if we have a lot of orders
+        # get_orders['has_next']
+
+        for order in get_orders['orders']:
+            # pp(order)
+            print("\n")
+
+            client_order_id = order['client_order_id']
+            created_time = order['created_time']
+            product_id = order['product_id']
+            time_in_force = order['time_in_force']
+            order_id = order['order_id']
+            outstanding_hold_amount = order['outstanding_hold_amount']
+            pending_cancel = order['pending_cancel']
+            total_value_after_fees = order['total_value_after_fees']
+            base_size = order['order_configuration']['limit_limit_gtc']['base_size']
+            limit_price = order['order_configuration']['limit_limit_gtc']['limit_price']
+            post_only = order['order_configuration']['limit_limit_gtc']['post_only']
+            print("client_order_id:", client_order_id)
+            print("created_time:", created_time)
+            print("product_id:", product_id)
+            print("time_in_force:", time_in_force)
+            print("order_id:", order_id)
+            print("outstanding_hold_amount:", outstanding_hold_amount)
+            print("pending_cancel:", pending_cancel)
+            print("total_value_after_fees:", total_value_after_fees)
+            print("total_value_after_fees:", total_value_after_fees)
+            print("base_size:", base_size)
+            print("limit_price:", limit_price)
+            print("post_only:", post_only)
 
         return get_orders
 
-    def get_current_bid_ask_prices(self, p_product_id):
+    def list_future_positions(self):
+        print(":list_future_positions:")
+
+        request_method = "GET"
+
+        # List Futures Positions
+        list_futures_pos_path = "/api/v3/brokerage/cfm/positions"
+
+        headers = self.jwt_authorization_header(request_method, list_futures_pos_path)
+        # print("headers:", headers)
+
+        list_futures_positions = self.cb_api_call(headers, request_method, list_futures_pos_path)
+        # print("list_futures_positions", list_futures_positions)
+        # pp(list_futures_positions)
+
+        # for future in list_futures_positions['positions']:
+        #     # print("list future:", future)
+        #     print("list future product_id:", future['product_id'])
+        #     print("list future expiration_time:", future['expiration_time'])
+        #     print("list future number_of_contracts:", future['number_of_contracts'])
+        #     print("list future side:", future['side'])
+        #     print("list future current_price:", future['current_price'])
+        #     print("list future avg_entry_price:", future['avg_entry_price'])
+        #     print("list future unrealized_pnl:", future['unrealized_pnl'])
+        #     print("list future number_of_contracts:", future['number_of_contracts'])
+
+        return list_futures_positions
+
+    def store_future_positions(self, list_futures_positions):
+        print(":store_future_positions:")
+        print("list_futures_positions:", list_futures_positions)
+
+        # Clear existing positions
+        with self.flask_app.app_context():  # Push an application context
+            db.session.query(FuturePosition).delete()
+            try:
+                # Clear existing positions
+                db.session.query(FuturePosition).delete()
+
+                if list_futures_positions and 'positions' in list_futures_positions:
+                    for future in list_futures_positions['positions']:
+                        print("future:", future)
+
+                        new_position = FuturePosition(
+                            product_id=future['product_id'],
+                            expiration_time=datetime.datetime.strptime(future['expiration_time'], "%Y-%m-%dT%H:%M:%SZ"),
+                            side=future['side'],
+                            number_of_contracts=int(future['number_of_contracts']),
+                            current_price=float(future['current_price']),
+                            avg_entry_price=float(future['avg_entry_price']),
+                            unrealized_pnl=float(future['unrealized_pnl']),
+                            daily_realized_pnl=float(future.get('daily_realized_pnl', 0))  # Handle optional fields
+                        )
+                        db.session.add(new_position)
+
+                db.session.commit()
+                print("Future positions updated.")
+            except db_errors as e:
+                db.session.rollback()
+                # self.flask_app.logger.error(f"Error storing future positions: {e}")
+                print(f"Error storing future positions: {e}")
+            except ValueError as e:
+                db.session.rollback()
+                # self.flask_app.logger.error(f"Data conversion error: {e}")
+                print(f"Data conversion error: {e}")
+            except Exception as e:
+                db.session.rollback()
+                # self.flask_app.logger.error(f"Unexpected error: {e}")
+                print(f"Unexpected error: {e}")
+
+    def get_future_positions(self, product_id):
+        print(":get_future_positions:")
+
+        request_method = "GET"
+
+        # Get Futures Position
+        get_futures_pos_path = f"/api/v3/brokerage/cfm/positions/{product_id}"
+        print("get_futures_pos_path:", get_futures_pos_path)
+
+        headers = self.jwt_authorization_header(request_method, get_futures_pos_path)
+        get_futures_positions = self.cb_api_call(headers, request_method, get_futures_pos_path)
+        print("get_futures_positions:", get_futures_positions)
+
+        return get_futures_positions
+
+    def get_current_bid_ask_prices(self, product_id):
         print(":get_current_future_price:")
 
         request_method = "GET"
@@ -391,7 +517,7 @@ class CoinbaseAdvAPI:
         headers = self.jwt_authorization_header(request_method, request_path)
         # print("headers:", headers)
 
-        url_query = f"?product_ids={p_product_id}"
+        url_query = f"?product_ids={product_id}"
 
         # Add all the options to the main API call
         request_path = f"/api/v3/brokerage/best_bid_ask{url_query}"
@@ -470,6 +596,9 @@ class CoinbaseAdvAPI:
         # print("close_contract", close_contract)
 
         return None
+
+    def edit_order(self, side, product_id):
+        print(":edit_order:")
 
     def close_position(self, client_order_id, product_id, contract_size):
         print(":close_position:")
@@ -628,13 +757,56 @@ class TradeManager:
         else:
             print("No daily signal found.")
 
+    def check_for_contract_expires(self):
+        print(":check_for_contract_expires:")
+
+        # NOTE: Futures markets are open for trading from Sunday 6 PM to
+        #  Friday 5 PM ET (excluding observed holidays),
+        #  with a 1-hour break each day from 5 PM – 6 PM ET
+
+        list_future_products = self.cb_adv_api.list_products("FUTURE")
+        current_month = self.cb_adv_api.get_current_short_month_uppercase()
+        self.cb_adv_api.store_btc_futures_products(list_future_products)
+        current_future_product = self.cb_adv_api.get_this_months_future()
+        # print(" current_future_product:", current_future_product)
+
+        if current_future_product:
+            # Make sure contract_expiry is timezone-aware
+            contract_expiry = current_future_product.contract_expiry.replace(tzinfo=pytz.utc)
+            # print("Contract expiry:", contract_expiry)
+
+            # Current time in UTC
+            now = datetime.datetime.now(pytz.utc)
+            # print("Now:", now)
+
+            # Calculate time difference
+            time_diff = contract_expiry - now
+
+            print("total_seconds:", time_diff.total_seconds())
+
+            # Check if the contract has expired
+            if time_diff.total_seconds() <= 0:
+                print("Contract has expired, close trades.")
+                # Here you would add code to handle closing trades
+            else:
+                days = time_diff.days
+                hours, remainder = divmod(time_diff.seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                print(
+                    f"Contract for {current_month} expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds.")
+        else:
+            print("No future product found for this month.")
+
+    def tracking_current_order_profit_loss(self):
+        print(":tracking_current_order_profit_loss:")
+
 
 if __name__ == "__main__":
     print(__name__)
 
     # cb_adv_api = CoinbaseAdvAPI()
 
-    # get_bal_summary = cb_adv_api.get_futures_balance_summary()
+    # get_bal_summary = cb_adv_api.get_balance_summary()
     # pp(get_bal_summary)
 
     # list_future_positions = cb_adv_api.list_and_get_future_positions()

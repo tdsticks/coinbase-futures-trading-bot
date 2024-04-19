@@ -1,4 +1,7 @@
 from coinbase import jwt_generator
+from coinbase.rest import RESTClient
+from coinbase.websocket import (WSClient, WSClientConnectionClosedException,
+                                WSClientException)
 from models.signals import AuroxSignal, FuturePriceAtSignal
 from models.futures import CoinbaseFuture, AccountBalanceSummary, FuturePosition
 from db import db, db_errors, or_
@@ -160,7 +163,7 @@ class CoinbaseAdvAPI:
         return get_product
 
     def list_products(self, product_type="FUTURE"):
-        print(":list_products:")
+        # print(":list_products:")
 
         request_method = "GET"
 
@@ -175,7 +178,7 @@ class CoinbaseAdvAPI:
         return get_products
 
     def store_btc_futures_products(self, future_products):
-        print(":store_btc_futures_products:")
+        # print(":store_btc_futures_products:")
         # print("future_products:", future_products, type(future_products))
 
         for future in future_products['products']:
@@ -225,6 +228,16 @@ class CoinbaseAdvAPI:
                     except Exception as e:
                         print(f"Failed to add future product {future['product_id']}: {e}")
                         db.session.rollback()
+
+    def get_current_future_product(self, product_id):
+        print(":get_current_future_product:")
+
+        with self.flask_app.app_context():
+            # Check if the future product already exists in the database
+            future_product = CoinbaseFuture.query.filter_by(product_id=product_id).first()
+            # print("\nfound future_product:", future_product)
+
+        return future_product
 
     def get_balance_summary(self):
         print(":get_balance_summary:")
@@ -276,22 +289,22 @@ class CoinbaseAdvAPI:
 
                 if existing_balance_summary:
                     # Update existing record
-                    existing_balance_summary.available_margin = float(balance_summary_data['available_margin']['value'])
-                    existing_balance_summary.cbi_usd_balance = float(balance_summary_data['cbi_usd_balance']['value'])
-                    existing_balance_summary.cfm_usd_balance = float(balance_summary_data['cfm_usd_balance']['value'])
-                    existing_balance_summary.daily_realized_pnl = float(balance_summary_data['daily_realized_pnl']['value'])
-                    existing_balance_summary.futures_buying_power = float(balance_summary_data['futures_buying_power']['value'])
-                    existing_balance_summary.initial_margin = float(balance_summary_data['initial_margin']['value'])
-                    existing_balance_summary.liquidation_buffer_amount = float(
+                    existing_balance_summary[0].available_margin = float(balance_summary_data['available_margin']['value'])
+                    existing_balance_summary[0].cbi_usd_balance = float(balance_summary_data['cbi_usd_balance']['value'])
+                    existing_balance_summary[0].cfm_usd_balance = float(balance_summary_data['cfm_usd_balance']['value'])
+                    existing_balance_summary[0].daily_realized_pnl = float(balance_summary_data['daily_realized_pnl']['value'])
+                    existing_balance_summary[0].futures_buying_power = float(balance_summary_data['futures_buying_power']['value'])
+                    existing_balance_summary[0].initial_margin = float(balance_summary_data['initial_margin']['value'])
+                    existing_balance_summary[0].liquidation_buffer_amount = float(
                         balance_summary_data['liquidation_buffer_amount']['value'])
-                    existing_balance_summary.liquidation_buffer_percentage = int(
+                    existing_balance_summary[0].liquidation_buffer_percentage = int(
                         balance_summary_data['liquidation_buffer_percentage'])
-                    existing_balance_summary.liquidation_threshold = float(
+                    existing_balance_summary[0].liquidation_threshold = float(
                         balance_summary_data['liquidation_threshold']['value'])
-                    existing_balance_summary.total_open_orders_hold_amount = float(
+                    existing_balance_summary[0].total_open_orders_hold_amount = float(
                         balance_summary_data['total_open_orders_hold_amount']['value'])
-                    existing_balance_summary.total_usd_balance = float(balance_summary_data['total_usd_balance']['value'])
-                    existing_balance_summary.unrealized_pnl = float(balance_summary_data['unrealized_pnl']['value'])
+                    existing_balance_summary[0].total_usd_balance = float(balance_summary_data['total_usd_balance']['value'])
+                    existing_balance_summary[0].unrealized_pnl = float(balance_summary_data['unrealized_pnl']['value'])
                     print("Updated existing balance summary")
                 else:
                     # Create new record if it does not exist
@@ -332,7 +345,7 @@ class CoinbaseAdvAPI:
         return short_month
 
     def get_this_months_future(self):
-        print(":get_this_months_future:")
+        # print(":get_this_months_future:")
 
         # Find this months future product
         with self.flask_app.app_context():
@@ -392,7 +405,7 @@ class CoinbaseAdvAPI:
 
         for order in get_orders['orders']:
             # pp(order)
-            print("\n")
+            # print("\n")
 
             client_order_id = order['client_order_id']
             created_time = order['created_time']
@@ -402,26 +415,31 @@ class CoinbaseAdvAPI:
             outstanding_hold_amount = order['outstanding_hold_amount']
             pending_cancel = order['pending_cancel']
             total_value_after_fees = order['total_value_after_fees']
-            base_size = order['order_configuration']['limit_limit_gtc']['base_size']
-            limit_price = order['order_configuration']['limit_limit_gtc']['limit_price']
-            post_only = order['order_configuration']['limit_limit_gtc']['post_only']
-            print("client_order_id:", client_order_id)
-            print("created_time:", created_time)
-            print("product_id:", product_id)
-            print("time_in_force:", time_in_force)
-            print("order_id:", order_id)
-            print("outstanding_hold_amount:", outstanding_hold_amount)
-            print("pending_cancel:", pending_cancel)
-            print("total_value_after_fees:", total_value_after_fees)
-            print("total_value_after_fees:", total_value_after_fees)
-            print("base_size:", base_size)
-            print("limit_price:", limit_price)
-            print("post_only:", post_only)
+
+            if 'limit_limit_gtc' in order['order_configuration']:
+                base_size = order['order_configuration']['limit_limit_gtc']['base_size']
+                limit_price = order['order_configuration']['limit_limit_gtc']['limit_price']
+                post_only = order['order_configuration']['limit_limit_gtc']['post_only']
+                # print("base_size:", base_size)
+                # print("limit_price:", limit_price)
+                # print("post_only:", post_only)
+            else:
+                pass
+                # print(order['order_configuration'])
+            # print("client_order_id:", client_order_id)
+            # print("created_time:", created_time)
+            # print("product_id:", product_id)
+            # print("time_in_force:", time_in_force)
+            # print("order_id:", order_id)
+            # print("outstanding_hold_amount:", outstanding_hold_amount)
+            # print("pending_cancel:", pending_cancel)
+            # print("total_value_after_fees:", total_value_after_fees)
+            # print("total_value_after_fees:", total_value_after_fees)
 
         return get_orders
 
     def list_future_positions(self):
-        print(":list_future_positions:")
+        # print(":list_future_positions:")
 
         request_method = "GET"
 
@@ -449,8 +467,8 @@ class CoinbaseAdvAPI:
         return list_futures_positions
 
     def store_future_positions(self, list_futures_positions):
-        print(":store_future_positions:")
-        print("list_futures_positions:", list_futures_positions)
+        # print(":store_future_positions:")
+        # print("list_futures_positions:", list_futures_positions)
 
         # Clear existing positions
         with self.flask_app.app_context():  # Push an application context
@@ -461,7 +479,7 @@ class CoinbaseAdvAPI:
 
                 if list_futures_positions and 'positions' in list_futures_positions:
                     for future in list_futures_positions['positions']:
-                        print("future:", future)
+                        # pp(future)
 
                         new_position = FuturePosition(
                             product_id=future['product_id'],
@@ -490,18 +508,19 @@ class CoinbaseAdvAPI:
                 # self.flask_app.logger.error(f"Unexpected error: {e}")
                 print(f"Unexpected error: {e}")
 
-    def get_future_positions(self, product_id):
-        print(":get_future_positions:")
+    def get_future_position(self, product_id):
+        print(":get_future_position:")
 
         request_method = "GET"
 
         # Get Futures Position
         get_futures_pos_path = f"/api/v3/brokerage/cfm/positions/{product_id}"
-        print("get_futures_pos_path:", get_futures_pos_path)
+        # print("get_futures_pos_path:", get_futures_pos_path)
 
         headers = self.jwt_authorization_header(request_method, get_futures_pos_path)
+
         get_futures_positions = self.cb_api_call(headers, request_method, get_futures_pos_path)
-        print("get_futures_positions:", get_futures_positions)
+        # print("get_futures_positions:", get_futures_positions)
 
         return get_futures_positions
 
@@ -629,9 +648,10 @@ class CoinbaseAdvAPI:
             "product_id": product_id,
             "size": contract_size
         })
+        print("payload:", payload)
 
-        # close_contract = self.cb_api_call(headers, request_method, request_path, payload)
-        # print("close_contract", close_contract)
+        close_contract = self.cb_api_call(headers, request_method, request_path, payload)
+        print("close_contract", close_contract)
 
 
 class TradeManager:
@@ -726,7 +746,7 @@ class TradeManager:
 
     def get_latest_daily_signal(self):
         print(":get_latest_daily_signal:")
-        with (self.flask_app.app_context()):
+        with self.flask_app.app_context():
             latest_signal = AuroxSignal.query \
                 .filter(AuroxSignal.time_unit == '1 Day') \
                 .order_by(AuroxSignal.timestamp.desc()) \
@@ -758,7 +778,7 @@ class TradeManager:
             print("No daily signal found.")
 
     def check_for_contract_expires(self):
-        print(":check_for_contract_expires:")
+        # print(":check_for_contract_expires:")
 
         # NOTE: Futures markets are open for trading from Sunday 6 PM to
         #  Friday 5 PM ET (excluding observed holidays),
@@ -768,7 +788,7 @@ class TradeManager:
         current_month = self.cb_adv_api.get_current_short_month_uppercase()
         self.cb_adv_api.store_btc_futures_products(list_future_products)
         current_future_product = self.cb_adv_api.get_this_months_future()
-        # print(" current_future_product:", current_future_product)
+        # print(" current_future_product:", current_future_product.product_id)
 
         if current_future_product:
             # Make sure contract_expiry is timezone-aware
@@ -781,39 +801,122 @@ class TradeManager:
 
             # Calculate time difference
             time_diff = contract_expiry - now
-
-            print("total_seconds:", time_diff.total_seconds())
+            # print("total_seconds:", time_diff.total_seconds())
 
             # Check if the contract has expired
             if time_diff.total_seconds() <= 0:
                 print("Contract has expired, close trades.")
                 # Here you would add code to handle closing trades
+                print(">>> Close out any positions!!!")
             else:
                 days = time_diff.days
                 hours, remainder = divmod(time_diff.seconds, 3600)
                 minutes, seconds = divmod(remainder, 60)
                 print(
-                    f"Contract for {current_month} expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds.")
+                    f"Contract for:\n"
+                    f"  {current_future_product.product_id}\n"
+                    f"  Month: {current_month} \n"
+                    f"  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds.")
         else:
             print("No future product found for this month.")
 
-    def tracking_current_order_profit_loss(self):
-        print(":tracking_current_order_profit_loss:")
+    def tracking_current_position_profit_loss(self):
+        print(":tracking_current_position_profit_loss:")
+
+        current_future = self.cb_adv_api.get_this_months_future()
+        future_position = self.cb_adv_api.get_future_position(product_id=current_future.product_id)
+
+        # Only run if we have ongoing positions
+        if future_position['position'] is not None:
+            current_future_product = self.cb_adv_api.get_current_future_product(current_future.product_id)
+            contract_size = future_position['position']['number_of_contracts']
+            print("contract_size:", contract_size)
+
+            product_contract_size = current_future_product.contract_size
+            avg_entry_price = float(future_position['position']['avg_entry_price']) * product_contract_size
+            current_price = float(future_position['position']['current_price']) * product_contract_size
+            # print("avg_entry_price:", avg_entry_price)
+            # print("current_price:", current_price)
+
+            calc_profit_or_loss = round(avg_entry_price - current_price, 4)
+            # print(f"    calc_profit_or_loss: ${calc_profit_or_loss}")
+
+            # Percentage change: (New Value - Original Value) / Original Value × 100
+            calc_percentage = round((avg_entry_price - current_price) / current_price * 100, 3)
+            # print(f"    calc_percentage: %{calc_percentage}")
+
+            print("\nContract Expires on", future_position['position']['expiration_time'])
+
+            # Check when the product contract expires and print it out
+            self.check_for_contract_expires()
+
+            print(">>> Profit / Loss:")
+            if calc_percentage >= 2:
+                print(f"    Take profit at 2% or higher %{calc_percentage}")
+                print(f"    Good Profit: ${calc_profit_or_loss}")
+
+                # client_order_id = '4ef6c115-c5c7-4915-89d1-077b56e79c31'
+                # self.cb_adv_api.close_position(client_order_id, current_future.product_id, contract_size)
+
+            elif 2 > calc_percentage > 0.5:
+                print(f"    Not ready to take profit %{calc_percentage}")
+                print(f"    Ok Profit: ${calc_profit_or_loss}")
+            elif 0.5 >= calc_percentage >= 0:
+                print(f"    Neutral  %{calc_percentage}")
+                print(f"    Not enough profit: ${calc_profit_or_loss}")
+            elif calc_percentage < 0:
+                print(f"    Trade negate %{calc_percentage}")
+                print(f"    No profit, loss of: ${calc_profit_or_loss}")
+        else:
+            print(f"No open positions: {future_position}")
 
 
 if __name__ == "__main__":
     print(__name__)
 
-    # cb_adv_api = CoinbaseAdvAPI()
+    # TODO: Need to switch to RESTClient calls
+    # TODO: Need to track orders OPEN and FILLED (keep updated_
+    # TODO: Do we need the websocket to watch prices?
 
-    # get_bal_summary = cb_adv_api.get_balance_summary()
-    # pp(get_bal_summary)
+    client = RESTClient(api_key=API_KEY, api_secret=API_SECRET)
 
-    # list_future_positions = cb_adv_api.list_and_get_future_positions()
-    # pp(list_future_positions)
+    list_futures_positions = client.list_futures_positions()
+    pp(list_futures_positions)
 
-    # new_order = cb_adv_api.create_order("BUY", "BIT-26APR24-CDE", 1)
-    # pp(new_order)
+    # accounts = client.get_accounts()
+    # pp(accounts)
+
+    # product = client.get_product("BTC-USD")
+    # product = client.get_product("BIT-26APR24-CDE")
+    # pp(product)
     #
-    # new_order = cb_adv_api.create_order("SELL", "BIT-26APR24-CDE", 1)
-    # pp(new_order)
+    # btc_futures_usd_price = float(product["price"])
+    # pp(btc_futures_usd_price)
+
+
+
+
+    ############################
+    # def on_message(msg):
+    #     print(msg)
+    # ws_client = WSClient(api_key=API_KEY, api_secret=API_SECRET, on_message=on_message, verbose=True)
+    # ws_client.open()
+    # # ws_client.subscribe(["BTC-USD"], ["heartbeats", "ticker"])
+    # ws_client.subscribe(["BIT-26APR24-CDE"], ["heartbeats", "ticker"])
+    # ws_client.sleep_with_exception_check(30)
+    # # ws_client.run_forever_with_exception_check()
+    # ws_client.close()
+
+    ############################
+    # def on_message(msg):
+    #     print(msg)
+    # ws_client = WSClient(api_key=API_KEY, api_secret=API_SECRET, on_message=on_message, verbose=True)
+    #
+    # try:
+    #     ws_client.open()
+    #     ws_client.subscribe(product_ids=["BTC-USD",], channels=["ticker", "heartbeats"])
+    #     ws_client.run_forever_with_exception_check()
+    # except WSClientConnectionClosedException as e:
+    #     print("Connection closed! Retry attempts exhausted.")
+    # except WSClientException as e:
+    #     print("Error encountered!")

@@ -45,7 +45,7 @@ class AccountBalanceSummary(db.Model):
     unrealized_pnl = db.Column(db.Float, nullable=True)
 
     def __repr__(self):
-        return f'<AccountBalanceSummary {self.id} - Total USD Balance: {self.total_usd_balance}>'
+        return f'<AccountBalanceSummary {self.id} - Total CFM USD Balance: {self.cfm_usd_balance}>'
 
 
 class FuturePosition(db.Model):

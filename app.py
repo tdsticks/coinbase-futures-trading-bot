@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_migrate import Migrate
 from db import db
 from pprint import pprint as pp
-from trade_manager import  CoinbaseAdvAPI
+from trade_manager import CoinbaseAdvAPI
 from trade_manager import TradeManager
 
 
@@ -139,16 +139,18 @@ def webhook():
 
 #######################
 # Balance Summary get and store
-# futures_balance = cbapi.get_balance_summary()
+futures_balance = cbapi.get_balance_summary()
 # pp(futures_balance)
-# cbapi.store_futures_balance_summary(futures_balance)
+cbapi.store_futures_balance_summary(futures_balance)
 #######################
 
 #######################
 # List Orders
-# future_product = cbapi.get_this_months_future()
+future_product = cbapi.get_this_months_future()
 # open_orders = cbapi.list_orders(product_id=future_product.product_id, order_status="OPEN")
 # pp(open_orders)
+filled_orders = cbapi.list_orders(product_id=future_product.product_id, order_status="FILLED")
+# pp(filled_orders)
 #######################
 
 #######################
@@ -157,6 +159,19 @@ future_positions = cbapi.list_future_positions()
 # pp(future_positions)
 cbapi.store_future_positions(future_positions)
 #######################
+
+#######################
+# Get Current Positions
+# future_positions = cbapi.get_future_position('BIT-26APR24-CDE')
+# pp(future_positions)
+#######################
+
+#######################
+# Get Current Positions
+curret_profit_or_loss = tm.tracking_current_position_profit_loss()
+# pp(curret_profit_or_loss)
+#######################
+
 
 
 if __name__ == '__main__':

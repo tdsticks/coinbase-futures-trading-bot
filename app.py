@@ -43,6 +43,26 @@ tm = TradeManager(app)
 
 # NOTE: Should we do laddering with orders to caught spikes and other liquidations or quick reversals?
 
+# NOTE: Since this whole bot is based on the Aurox Indicator (Ax) signal. We really need to wait
+#   and be patient with it. Again, weekly sigals are far and in few throughout the year.
+#   Scenario One:
+#       The week of Sep 25h, 2023 we see a green long signal. It wasn't until Sep 28th, 2023 using Coinbase
+#       BTC/USD chart in Aurox that we see the first Daily signal. Now, technically we could start opening
+#       a long trade after the Weekly comes in and that might be ok, but we're aiming for safety, especially
+#       dealing with future contracts. BTC had been going sideways even prior to that weekly, so you really
+#       need to watch the charts, turn off the trading (but keep the bot running to track the signals)
+#       if you feel it's too risky or not worth trading.
+#       Around the beginning of Oct (5th, 7th and 9th) we see more Daily signals (Short, Long, Short),
+#       then a dip in the market until another green long on Oct 15th, then a nice surge in the market upwards.
+#       Technically speaking, if we had waited to place the first trade around the first Daily (into Oct),
+#       then we'd be in a new contract month and riding out the dip, it would have been a great place
+#       to be. We could then close out at that Daily short signal right before end the of Oct on the 27th.
+#       That would have been roughly 25% on that trade (or multiple trades if you DCA on the dip).
+#       Note: We need to track and trade within the monthly contracts to avoid forceful closing them on Coinbase Futures.
+#   Scenario Two:
+#
+
+
 
 @app.route('/', methods=['GET'])
 def index():
@@ -104,20 +124,20 @@ def webhook():
 # print("porfolios:", porfolios)
 #######################
 
-# weekly_signals = tm.get_latest_weekly_signal()
-# daily_signals = tm.get_latest_daily_signal()
+weekly_signals = tm.get_latest_weekly_signal()
+daily_signals = tm.get_latest_daily_signal()
 
-# print("weekly_signals:", weekly_signals)
-# print("\nweekly_signals: signal", weekly_signals.time_unit)
-# print("weekly_signals: signal", weekly_signals.timestamp)
-# print("weekly_signals: signal", weekly_signals.price)
-# print("weekly_signals: signal", weekly_signals.signal)
+print("weekly_signals:", weekly_signals)
+print("\nweekly_signals: signal", weekly_signals.time_unit)
+print("weekly_signals: signal", weekly_signals.timestamp)
+print("weekly_signals: signal", weekly_signals.price)
+print("weekly_signals: signal", weekly_signals.signal)
 
-# print("daily_signals:", daily_signals)
-# print("\ndaily_signals: signal", daily_signals.time_unit)
-# print("daily_signals: signal", daily_signals.timestamp)
-# print("daily_signals: signal", daily_signals.price)
-# print("daily_signals: signal", daily_signals.signal)
+print("daily_signals:", daily_signals)
+print("\ndaily_signals: signal", daily_signals.time_unit)
+print("daily_signals: signal", daily_signals.timestamp)
+print("daily_signals: signal", daily_signals.price)
+print("daily_signals: signal", daily_signals.signal)
 
 # compare_daily = tm.compare_last_daily_to_todays_date()
 # print("compare_daily:", compare_daily)

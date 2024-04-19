@@ -155,7 +155,7 @@ their indicator, we still need to be careful as to when their indicator is confi
 method of which you setup your Aurox alerts is important. Using their default "predefined alert" is a 
 good starting point. I do adjust mine and remove the opposing condition under the "Criterion" so its 
 only long if its a long signal and short for short. The key with this alert is that the Operation is set
-to "Becomes" vs "is". I'm using their default "Becomes", but this could be up for debate or need
+to "Becomes" vs "is". I'm using the "Is" operation ("Becomes" is default), but this could be up for debate or need
 continued testing on which is better. Since the Weekly signals are far and few in between, we need
 to add the last indicator entry to our database (SQLite for now). This will give our bot the starting
 point on what to check against for placing trades when Daily signals come in. The other challenging thing
@@ -169,7 +169,7 @@ looking from a large time frame.
 #### When does the bot enter (when do we place trades)?
   - Well again, we want to be safe and not haphazard with our initial order, especially 
   in futures. I would say it's safer to place after the first Daily indicator after the Weekly was set
-  in the same direction. So if the Weekly was short (like on April 8th 2024 using Coinbase BTC/USDT),
+  in the same direction. So if the Weekly was short (like on April 8th 2024 using Coinbase BTC/USD),
   then the first Daily happened on April 12th, 2024. This should be a safer, more confirmed, 
   place to start shorting the market. 
 
@@ -221,7 +221,7 @@ Coding Requirements (MacOS):
 1. Setup a new virtual environment using pyenv and python 3.10.0
 2. Switch to the new virt-env for this project and install the requirements.txt file
 3. Clone the Repository
-   1. git clone https://github.com/yourgithub/aurox-coinbase-bot.git
+   1. git clone https://github.com/tdsticks/aurox-signals-coinbase-advanced-api
    2. cd aurox-coinbase-bot
 4. **Set up the Environment:**
    1. Install Python dependencies: `pip install -r requirements.txt`

@@ -1,4 +1,3 @@
-from coinbase import jwt_generator
 from coinbase.rest import RESTClient
 from coinbase.websocket import (WSClient, WSClientConnectionClosedException,
                                 WSClientException)
@@ -10,7 +9,6 @@ from pprint import pprint as pp
 import datetime
 import pytz
 import os
-import http.client
 import json
 import uuid
 
@@ -45,58 +43,8 @@ class CoinbaseAdvAPI:
 
     def __init__(self, flask_app):
         print(":Initializing CoinbaseAdvAPI:")
-
-        # Assign the initial http connection
-        self.conn = http.client.HTTPSConnection("api.coinbase.com")
         self.flask_app = flask_app
         self.client = RESTClient(api_key=API_KEY, api_secret=API_SECRET)
-
-    @staticmethod
-    def jwt_authorization_header(method, path):
-        """
-        Be sure to path the same request method and API url (path) to both the JWT and the API call
-        """
-        # print(":jwt_authorization_header:")
-
-        jwt_uri = jwt_generator.format_jwt_uri(method, path)
-        jwt_token = jwt_generator.build_rest_jwt(jwt_uri, API_KEY, API_SECRET)
-
-        create_headers = {
-            "Authorization": f"Bearer {jwt_token}",
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)"
-        }
-        return create_headers
-
-    def cb_api_call(self, p_headers, method, path, payload_param=None):
-        """
-        Be sure to path the same request method and API url (path) to both the JWT and the API call
-        """
-        # print(":cb_api_call:")
-
-        # Check to see if we have a payload, otherwise assign it empty
-        if payload_param is not None:
-            payload = payload_param
-        else:
-            payload = ''
-        # print("payload:", payload)
-
-        # Make the API request
-        self.conn.request(method, path, payload, p_headers)
-
-        # Assign the response from the API request
-        res = self.conn.getresponse()
-        # print("response:", res)
-
-        # Read the data response
-        data = res.read()
-        # print("data:", data)
-
-        # print(data.decode("utf-8"), type(data.decode("utf-8")))
-        # pp(data.decode("utf-8"))
-
-        # Return the data response in JSON
-        return json.loads(data.decode("utf-8"))
 
     def get_portfolios(self):
         print(":get_portfolio_breakdown:")
@@ -437,13 +385,8 @@ class CoinbaseAdvAPI:
     def generate_uuid4():
         return uuid.uuid4()
 
-    def create_order(self, side, product_id, size):
+    def create_order(self, side, product_id, size, limit_price, leverage="3", order_type='market_market_ioc'):
         print(":create_order:")
-
-        request_method = "POST"
-
-        # Create Order
-        request_path = "/api/v3/brokerage/orders"
 
         # client_order_id
         #   A unique ID provided by the client for their own identification purposes.
@@ -476,31 +419,49 @@ class CoinbaseAdvAPI:
         #   stop_limit_stop_limit_gtc
         #   stop_limit_stop_limit_gtd
 
-        headers = self.jwt_authorization_header(request_method, request_path)
-        # print("headers:", headers)
+        # quote_size
+        # Amount of quote currency to spend on order. Required for BUY orders.
+
+        # base_size
+        # Amount of base currency to spend on order. Required for SELL orders.
+
+        # limit_price
+        # Ceiling price for which the order should get filled.
 
         # A unique UUID that we make (should store and not repeat, must be in UUID format
+        # TODO: Need to store this value in the DB
         # Generate and print a UUID4
         client_order_id = self.generate_uuid4()
         print("Generated client_order_id:", client_order_id)
 
-        payload = json.dumps({
-            "client_order_id": str(client_order_id),
-            "product_id": product_id,
-            "side": side,
+        order_configuration = {
             "order_configuration": {
-                "market_market_ioc": {
-                    "quote_size": str(size)
-                }
+                order_type: {}
             },
-            "leverage": "1.0"
-        })
-        pp(payload)
+            "side": side,
+            "leverage": leverage
+        }
+        if side == "BUY":
+            order_configuration['order_configuration'][order_type]["quote_size"] = str(size)
+        elif side == "SELL":
+            order_configuration['order_configuration'][order_type]["base_size"] = str(size)
 
-        # close_contract = cb_api_call(headers, request_method, request_path, payload)
-        # print("close_contract", close_contract)
+        if 'limit' in order_type:
+            order_configuration['order_configuration'][order_type]["limit_price"] = limit_price
+            order_configuration['order_configuration'][order_type]["post_only"] = "false"
+        print("order_configuration:", order_configuration)
 
-        return None
+        # TODO: Store in database
+
+        order_created = self.client.create_order(client_order_id=client_order_id,
+                                                 product_id=product_id,
+                                                 side=side,
+                                                 order_configuration=order_configuration)
+        # TODO: Store in database
+
+        print("order_created:", order_created)
+
+        return order_created
 
     def edit_order(self, side, product_id):
         print(":edit_order:")
@@ -521,23 +482,12 @@ class CoinbaseAdvAPI:
             to sell the same number of BTC 23 Feb 24 contracts. If you were short to begin
             with, go long the same number of contracts to close your position.
         """
-        request_method = "POST"
+        close_position = self.client.close_position(client_order_id=client_order_id,
+                                                    product_id=product_id,
+                                                    size=contract_size)
+        print("close:", close_position)
 
-        # Close Position
-        request_path = "/api/v3/brokerage/orders/close_position"
-
-        headers = self.jwt_authorization_header(request_method, request_path)
-        # print("headers:", headers)
-
-        payload = json.dumps({
-            "client_order_id": client_order_id,
-            "product_id": product_id,
-            "size": contract_size
-        })
-        print("payload:", payload)
-
-        close_contract = self.cb_api_call(headers, request_method, request_path, payload)
-        print("close_contract", close_contract)
+        return close_position
 
 
 class TradeManager:

@@ -49,6 +49,7 @@ class CoinbaseAdvAPI:
         # Assign the initial http connection
         self.conn = http.client.HTTPSConnection("api.coinbase.com")
         self.flask_app = flask_app
+        self.client = RESTClient(api_key=API_KEY, api_secret=API_SECRET)
 
     @staticmethod
     def jwt_authorization_header(method, path):
@@ -97,82 +98,37 @@ class CoinbaseAdvAPI:
         # Return the data response in JSON
         return json.loads(data.decode("utf-8"))
 
-    def list_and_get_portfolios(self):
-        print(":list_and_get_portfolios:")
+    def get_portfolios(self):
+        print(":get_portfolio_breakdown:")
 
-        request_method = "GET"
+        get_portfolios = self.client.get_portfolios()
+        # print("get_portfolios", get_portfolios)
 
-        # List Portfolios
-        request_path = "/api/v3/brokerage/portfolios"
+        uuid = get_portfolios['portfolios'][0]['uuid']
+        print("uuid", uuid)
 
-        headers = self.jwt_authorization_header(request_method, request_path)
-        # print("headers:", headers)
+        return uuid
 
-        list_portfolios = self.cb_api_call(headers, request_method, request_path)
-        print("list_portfolios", list_portfolios['portfolios'])
-        # list_portfolios {'portfolios': [{'name': 'Default', 'uuid': '7456a543-d356-fioe-w343-4trjoas345is', 'type': 'DEFAULT', 'deleted': False}]}
+    def get_portfolio_breakdown(self, portfolio_uuid):
+        print(":get_portfolio_breakdown:")
 
-        portfolio_uuid = list_portfolios['portfolios'][0]['uuid']
-        print("portfolio_uuid", portfolio_uuid)
+        get_portfolio_breakdown = self.client.get_portfolio_breakdown(portfolio_uuid=portfolio_uuid)
+        print("get_portfolio_breakdown", get_portfolio_breakdown)
 
-        # List Portfolios
-        request_path = f"/api/v3/brokerage/portfolios/{portfolio_uuid}"
-
-        headers = self.jwt_authorization_header(request_method, request_path)
-        # print("headers:", headers)
-
-        get_portfolio_breakdown = self.cb_api_call(headers, request_method, request_path)
-        # print("get_portfolio_breakdown", get_portfolio_breakdown)
-
-        for breakdown in get_portfolio_breakdown['breakdown']:
-            # print("breakdown:", breakdown, get_portfolio_breakdown['breakdown'][breakdown])
-            """
-            breakdown: portfolio
-            breakdown: portfolio_balances
-            breakdown: spot_positions
-            breakdown: perp_positions
-            breakdown: futures_positions
-            """
-        # for portfolio in get_portfolio_breakdown['breakdown']['portfolio']:
-        #     print("portfolio:", portfolio, get_portfolio_breakdown['breakdown']['portfolio'][portfolio])
-
-        # for portfolio_balances in get_portfolio_breakdown['breakdown']['portfolio_balances']:
-        #     # print(portfolio_balances, get_portfolio_breakdown['breakdown']['portfolio_balances'])
-        #
-        #     for balance in get_portfolio_breakdown['breakdown']['portfolio_balances'][portfolio_balances]:
-        #         print(" ", portfolio_balances, balance, get_portfolio_breakdown['breakdown']['portfolio_balances'][portfolio_balances][balance])
-
-        # for futures_positions in get_portfolio_breakdown['breakdown']['futures_positions']:
-        #     # print(futures_positions)
-        #     for position in futures_positions:
-        #         print(" position:", position, futures_positions[position])
+        return
 
     def get_product(self, product_id="BTC-USDT"):
         print(":get_product:")
 
-        request_method = "GET"
-
-        # Get Product
-        request_path = f"/api/v3/brokerage/products/{product_id}"
-
-        headers = self.jwt_authorization_header(request_method, request_path)
-
-        get_product = self.cb_api_call(headers, request_method, request_path)
-        # print("get_product:", get_product)
+        get_product = self.client.get_product(product_id=product_id)
+        print("get_product:", get_product)
 
         return get_product
 
     def list_products(self, product_type="FUTURE"):
         # print(":list_products:")
 
-        request_method = "GET"
-
-        # List Products
-        request_path = "/api/v3/brokerage/products"
-        headers = self.jwt_authorization_header(request_method, request_path)
-
-        request_path = f"/api/v3/brokerage/products?product_type={product_type}"
-        get_products = self.cb_api_call(headers, request_method, request_path)
+        get_products = self.client.get_products(product_type=product_type)
         # print("get_products:", get_products)
 
         return get_products
@@ -242,16 +198,8 @@ class CoinbaseAdvAPI:
     def get_balance_summary(self):
         print(":get_balance_summary:")
 
-        request_method = "GET"
-
-        # Get Futures Balance Summary
-        request_path = "/api/v3/brokerage/cfm/balance_summary"
-
-        headers = self.jwt_authorization_header(request_method, request_path)
-        # print("headers:", headers)
-
-        balance_summary = self.cb_api_call(headers, request_method, request_path)
-        # print("balance_summary", balance_summary)
+        balance_summary = self.client.get_futures_balance_summary()
+        # pp(balance_summary)
 
         """
         Example:
@@ -368,89 +316,55 @@ class CoinbaseAdvAPI:
     def list_orders(self, product_id, order_status, product_type="FUTURE"):
         print(":list_orders:")
 
-        request_method = "GET"
-
-        # List Orders
-        # /orders/historical/batch?order_status=CANCELLED,EXPIRED
-
-        # Keep this one simple for the headers JWT call
-        request_path = "/api/v3/brokerage/orders/historical/batch"
-        # print("request_path:", request_path)
-
-        headers = self.jwt_authorization_header(request_method, request_path)
-        # print("headers:", headers)
-
-        url_query = "?"
-        # url_query += "order_status=OPEN"
-        # url_query += "order_status=FILLED"
-        url_query += f"order_status={order_status}"
-        # url_query += "&order_type=UNKNOWN_ORDER_TYPE"
-        # url_query += "&side=UNKNOWN_ORDER_SIDE"
-        url_query += f"&product_id={product_id}"
-        url_query += f"&product_type={product_type}"
-        # url_query += "&order_placement_source=RETAIL_ADVANCED",
-        # "retail_portfolio_id": "default"
-
-        # Add all the options to the main API call
-        request_path = "/api/v3/brokerage/orders/historical/batch" + url_query
-        # /api/v3/brokerage/orders/historical/batch?product_id=BIT-26APR24-CD&order_side=BUY&product_type=FUTURE
-        # print("request_path:", request_path)
-
-        get_orders = self.cb_api_call(headers, request_method, request_path)
-        # print("get_orders", get_orders)
-        # pp(get_orders)
+        list_orders = self.client.list_orders(order_status=order_status,
+                                              product_id=product_id, product_type=product_type)
+        # pp(list_orders)
 
         # Use if we have a lot of orders
         # get_orders['has_next']
 
-        for order in get_orders['orders']:
-            # pp(order)
-            # print("\n")
+        # for order in list_orders['orders']:
+        #     # pp(order)
+        #     # print("\n")
+        #
+        #     client_order_id = order['client_order_id']
+        #     created_time = order['created_time']
+        #     product_id = order['product_id']
+        #     time_in_force = order['time_in_force']
+        #     order_id = order['order_id']
+        #     outstanding_hold_amount = order['outstanding_hold_amount']
+        #     pending_cancel = order['pending_cancel']
+        #     total_value_after_fees = order['total_value_after_fees']
+        #
+        #     if 'limit_limit_gtc' in order['order_configuration']:
+        #         base_size = order['order_configuration']['limit_limit_gtc']['base_size']
+        #         limit_price = order['order_configuration']['limit_limit_gtc']['limit_price']
+        #         post_only = order['order_configuration']['limit_limit_gtc']['post_only']
+        #         # print("base_size:", base_size)
+        #         # print("limit_price:", limit_price)
+        #         # print("post_only:", post_only)
+        #     else:
+        #         pass
+        #         # print(order['order_configuration'])
+        #     # print("client_order_id:", client_order_id)
+        #     # print("created_time:", created_time)
+        #     # print("product_id:", product_id)
+        #     # print("time_in_force:", time_in_force)
+        #     # print("order_id:", order_id)
+        #     # print("outstanding_hold_amount:", outstanding_hold_amount)
+        #     # print("pending_cancel:", pending_cancel)
+        #     # print("total_value_after_fees:", total_value_after_fees)
+        #     # print("total_value_after_fees:", total_value_after_fees)
 
-            client_order_id = order['client_order_id']
-            created_time = order['created_time']
-            product_id = order['product_id']
-            time_in_force = order['time_in_force']
-            order_id = order['order_id']
-            outstanding_hold_amount = order['outstanding_hold_amount']
-            pending_cancel = order['pending_cancel']
-            total_value_after_fees = order['total_value_after_fees']
+        return list_orders
 
-            if 'limit_limit_gtc' in order['order_configuration']:
-                base_size = order['order_configuration']['limit_limit_gtc']['base_size']
-                limit_price = order['order_configuration']['limit_limit_gtc']['limit_price']
-                post_only = order['order_configuration']['limit_limit_gtc']['post_only']
-                # print("base_size:", base_size)
-                # print("limit_price:", limit_price)
-                # print("post_only:", post_only)
-            else:
-                pass
-                # print(order['order_configuration'])
-            # print("client_order_id:", client_order_id)
-            # print("created_time:", created_time)
-            # print("product_id:", product_id)
-            # print("time_in_force:", time_in_force)
-            # print("order_id:", order_id)
-            # print("outstanding_hold_amount:", outstanding_hold_amount)
-            # print("pending_cancel:", pending_cancel)
-            # print("total_value_after_fees:", total_value_after_fees)
-            # print("total_value_after_fees:", total_value_after_fees)
-
-        return get_orders
+    def store_orders(self, orders):
+        print(":store_orders:")
 
     def list_future_positions(self):
-        # print(":list_future_positions:")
+        print(":list_future_positions:")
 
-        request_method = "GET"
-
-        # List Futures Positions
-        list_futures_pos_path = "/api/v3/brokerage/cfm/positions"
-
-        headers = self.jwt_authorization_header(request_method, list_futures_pos_path)
-        # print("headers:", headers)
-
-        list_futures_positions = self.cb_api_call(headers, request_method, list_futures_pos_path)
-        # print("list_futures_positions", list_futures_positions)
+        list_futures_positions = self.client.list_futures_positions()
         # pp(list_futures_positions)
 
         # for future in list_futures_positions['positions']:
@@ -466,21 +380,17 @@ class CoinbaseAdvAPI:
 
         return list_futures_positions
 
-    def store_future_positions(self, list_futures_positions):
-        # print(":store_future_positions:")
-        # print("list_futures_positions:", list_futures_positions)
-
+    def store_future_positions(self, p_list_futures_positions):
+        print(":store_future_positions:")
+        # print("p_list_futures_positions:", p_list_futures_positions)
         # Clear existing positions
         with self.flask_app.app_context():  # Push an application context
-            db.session.query(FuturePosition).delete()
             try:
-                # Clear existing positions
-                db.session.query(FuturePosition).delete()
-
-                if list_futures_positions and 'positions' in list_futures_positions:
-                    for future in list_futures_positions['positions']:
+                if p_list_futures_positions and 'positions' in p_list_futures_positions and p_list_futures_positions['positions']:
+                    # Clear existing positions
+                    db.session.query(FuturePosition).delete()
+                    for future in p_list_futures_positions['positions']:
                         # pp(future)
-
                         new_position = FuturePosition(
                             product_id=future['product_id'],
                             expiration_time=datetime.datetime.strptime(future['expiration_time'], "%Y-%m-%dT%H:%M:%SZ"),
@@ -492,9 +402,8 @@ class CoinbaseAdvAPI:
                             daily_realized_pnl=float(future.get('daily_realized_pnl', 0))  # Handle optional fields
                         )
                         db.session.add(new_position)
-
-                db.session.commit()
-                print("Future positions updated.")
+                    db.session.commit()
+                    print("Future positions updated.")
             except db_errors as e:
                 db.session.rollback()
                 # self.flask_app.logger.error(f"Error storing future positions: {e}")
@@ -511,15 +420,7 @@ class CoinbaseAdvAPI:
     def get_future_position(self, product_id):
         print(":get_future_position:")
 
-        request_method = "GET"
-
-        # Get Futures Position
-        get_futures_pos_path = f"/api/v3/brokerage/cfm/positions/{product_id}"
-        # print("get_futures_pos_path:", get_futures_pos_path)
-
-        headers = self.jwt_authorization_header(request_method, get_futures_pos_path)
-
-        get_futures_positions = self.cb_api_call(headers, request_method, get_futures_pos_path)
+        get_futures_positions = self.client.get_futures_position(product_id=product_id)
         # print("get_futures_positions:", get_futures_positions)
 
         return get_futures_positions
@@ -527,22 +428,7 @@ class CoinbaseAdvAPI:
     def get_current_bid_ask_prices(self, product_id):
         print(":get_current_future_price:")
 
-        request_method = "GET"
-
-        # Get Best Bid/Ask
-        request_path = "/api/v3/brokerage/best_bid_ask"
-        # print("request_path:", request_path)
-
-        headers = self.jwt_authorization_header(request_method, request_path)
-        # print("headers:", headers)
-
-        url_query = f"?product_ids={product_id}"
-
-        # Add all the options to the main API call
-        request_path = f"/api/v3/brokerage/best_bid_ask{url_query}"
-        # print("request_path:", request_path)
-
-        get_bid_ask = self.cb_api_call(headers, request_method, request_path)
+        get_bid_ask = self.client.get_best_bid_ask(product_ids=product_id)
         # print("get_bid_ask", get_bid_ask)
 
         return get_bid_ask
@@ -778,7 +664,7 @@ class TradeManager:
             print("No daily signal found.")
 
     def check_for_contract_expires(self):
-        # print(":check_for_contract_expires:")
+        print(":check_for_contract_expires:")
 
         # NOTE: Futures markets are open for trading from Sunday 6 PM to
         #  Friday 5 PM ET (excluding observed holidays),
@@ -813,12 +699,12 @@ class TradeManager:
                 hours, remainder = divmod(time_diff.seconds, 3600)
                 minutes, seconds = divmod(remainder, 60)
                 print(
-                    f"Contract for:\n"
+                    f"\nContract for:"
                     f"  {current_future_product.product_id}\n"
                     f"  Month: {current_month} \n"
                     f"  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds.")
         else:
-            print("No future product found for this month.")
+            print(" No future product found for this month.")
 
     def tracking_current_position_profit_loss(self):
         print(":tracking_current_position_profit_loss:")
@@ -827,10 +713,10 @@ class TradeManager:
         future_position = self.cb_adv_api.get_future_position(product_id=current_future.product_id)
 
         # Only run if we have ongoing positions
-        if future_position['position'] is not None:
+        if future_position['position']:
             current_future_product = self.cb_adv_api.get_current_future_product(current_future.product_id)
             contract_size = future_position['position']['number_of_contracts']
-            print("contract_size:", contract_size)
+            print(" contract_size:", contract_size)
 
             product_contract_size = current_future_product.contract_size
             avg_entry_price = float(future_position['position']['avg_entry_price']) * product_contract_size
@@ -845,7 +731,7 @@ class TradeManager:
             calc_percentage = round((avg_entry_price - current_price) / current_price * 100, 3)
             # print(f"    calc_percentage: %{calc_percentage}")
 
-            print("\nContract Expires on", future_position['position']['expiration_time'])
+            print("Contract Expires on", future_position['position']['expiration_time'])
 
             # Check when the product contract expires and print it out
             self.check_for_contract_expires()
@@ -868,7 +754,7 @@ class TradeManager:
                 print(f"    Trade negate %{calc_percentage}")
                 print(f"    No profit, loss of: ${calc_profit_or_loss}")
         else:
-            print(f"No open positions: {future_position}")
+            print(f"    No open positions: {future_position}")
 
 
 if __name__ == "__main__":
@@ -877,24 +763,6 @@ if __name__ == "__main__":
     # TODO: Need to switch to RESTClient calls
     # TODO: Need to track orders OPEN and FILLED (keep updated_
     # TODO: Do we need the websocket to watch prices?
-
-    client = RESTClient(api_key=API_KEY, api_secret=API_SECRET)
-
-    list_futures_positions = client.list_futures_positions()
-    pp(list_futures_positions)
-
-    # accounts = client.get_accounts()
-    # pp(accounts)
-
-    # product = client.get_product("BTC-USD")
-    # product = client.get_product("BIT-26APR24-CDE")
-    # pp(product)
-    #
-    # btc_futures_usd_price = float(product["price"])
-    # pp(btc_futures_usd_price)
-
-
-
 
     ############################
     # def on_message(msg):

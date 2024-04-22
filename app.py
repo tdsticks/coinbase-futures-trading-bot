@@ -4,28 +4,17 @@ from db import db
 from pprint import pprint as pp
 from trade_manager import CoinbaseAdvAPI
 from trade_manager import TradeManager
+from flask_apscheduler import APScheduler
 
 
-def create_app():
-    flask_app = Flask(__name__)
-    flask_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///aurox_signals.db'
-    flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-    db.init_app(flask_app)
-    migrate = Migrate(flask_app, db)
-    print("migrate:", migrate)
-
-    with flask_app.app_context():
-        db.create_all()
-
-    return flask_app
+# set configuration values
+class Config:
+    SCHEDULER_API_ENABLED = True
 
 
-app = create_app()
-
-cbapi = CoinbaseAdvAPI(app)
-tm = TradeManager(app)
-
+# NOTE: Futures markets are open for trading from Sunday 6 PM to
+#  Friday 5 PM ET (excluding observed holidays),
+#  with a 1-hour break each day from 5 PM – 6 PM ET
 
 # NOTE: Need to figure out the trading logic here with orders
 #   Following Aurox guides, we should only be taking signals on the Weekly and maybe daily
@@ -62,6 +51,29 @@ tm = TradeManager(app)
 #   Scenario Two:
 #
 
+
+def create_app():
+    flask_app = Flask(__name__)
+    flask_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///aurox_signals.db'
+    flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    db.init_app(flask_app)
+    migrate = Migrate(flask_app, db)
+    print("migrate:", migrate)
+
+    with flask_app.app_context():
+        db.create_all()
+
+    return flask_app
+
+
+app = create_app()
+
+# Add the ApScheduler Config
+app.config.from_object(Config())
+
+cbapi = CoinbaseAdvAPI(app)
+tm = TradeManager(app)
 
 
 @app.route('/', methods=['GET'])
@@ -120,24 +132,13 @@ def webhook():
 #######################
 
 #######################
-# porfolios = cbapi.list_and_get_portfolios()
-# print("porfolios:", porfolios)
+# Get Porfolios
+# porfolio_uuid = cbapi.get_portfolios()
+# print("porfolio_uuid:", porfolio_uuid)
+
+# porfolio_breakdown = cbapi.get_portfolio_breakdown(portfolio_uuid=porfolio_uuid)
+# print("porfolio_breakdown:", porfolio_breakdown)
 #######################
-
-weekly_signals = tm.get_latest_weekly_signal()
-daily_signals = tm.get_latest_daily_signal()
-
-print("weekly_signals:", weekly_signals)
-print("\nweekly_signals: signal", weekly_signals.time_unit)
-print("weekly_signals: signal", weekly_signals.timestamp)
-print("weekly_signals: signal", weekly_signals.price)
-print("weekly_signals: signal", weekly_signals.signal)
-
-print("daily_signals:", daily_signals)
-print("\ndaily_signals: signal", daily_signals.time_unit)
-print("daily_signals: signal", daily_signals.timestamp)
-print("daily_signals: signal", daily_signals.price)
-print("daily_signals: signal", daily_signals.signal)
 
 # compare_daily = tm.compare_last_daily_to_todays_date()
 # print("compare_daily:", compare_daily)
@@ -157,27 +158,18 @@ print("daily_signals: signal", daily_signals.signal)
 # print(check_contract_expiration)
 #######################
 
-#######################
-# Balance Summary get and store
-futures_balance = cbapi.get_balance_summary()
-# pp(futures_balance)
-cbapi.store_futures_balance_summary(futures_balance)
-#######################
 
 #######################
 # List Orders
-future_product = cbapi.get_this_months_future()
+# future_product = cbapi.get_this_months_future()
 # open_orders = cbapi.list_orders(product_id=future_product.product_id, order_status="OPEN")
 # pp(open_orders)
-filled_orders = cbapi.list_orders(product_id=future_product.product_id, order_status="FILLED")
-# pp(filled_orders)
-#######################
 
-#######################
-# Get Current Positions
-future_positions = cbapi.list_future_positions()
-# pp(future_positions)
-cbapi.store_future_positions(future_positions)
+# filled_orders = cbapi.list_orders(product_id=future_product.product_id, order_status="FILLED")
+# pp(filled_orders)
+
+# cbapi.store_orders(open_orders)
+# cbapi.store_orders(filled_orders)
 #######################
 
 #######################
@@ -187,15 +179,94 @@ cbapi.store_future_positions(future_positions)
 #######################
 
 #######################
-# Get Current Positions
-curret_profit_or_loss = tm.tracking_current_position_profit_loss()
-# pp(curret_profit_or_loss)
+# Get Current Bid Ask Prices
+# current_future_product = cbapi.get_this_months_future()
+# print("current_future_product:", current_future_product)
+#
+# future_bid_ask_price = cbapi.get_current_bid_ask_prices(current_future_product.product_id)
+# future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+# future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+# print("bid:", future_bid_price, "ask:", future_ask_price)
+#######################
+
+#######################
+# List Products
+# list_products = cbapi.list_products()
+# pp(list_products)
+#######################
+
+#######################
+# Get Product
+# get_product = cbapi.get_product("BIT-26APR24-CDE")
+# pp(get_product)
 #######################
 
 
+
+#######################
+# AP Scheduler
+#######################
+
+# If you wish to use anything from your Flask app context inside the job you can use something like this
+# def blah():
+#     with scheduler.app.app_context():
+#         # do stuff
+
+# initialize scheduler
+scheduler = APScheduler()
+
+
+@scheduler.task('interval', id='do_job_1', seconds=60, misfire_grace_time=900)
+def check_latest_signals_job():
+    print('\n:check_latest_signals_job:')
+    weekly_signals = tm.get_latest_weekly_signal()
+    daily_signals = tm.get_latest_daily_signal()
+    # print("weekly_signals:", weekly_signals)
+    print(" weekly_signals:", weekly_signals.time_unit)
+    print(" weekly_signals:", weekly_signals.timestamp)
+    print(" weekly_signals:", weekly_signals.price)
+    print(" weekly_signals:", weekly_signals.signal)
+    # print("daily_signals:", daily_signals)
+    print(" daily_signals:", daily_signals.time_unit)
+    print(" daily_signals:", daily_signals.timestamp)
+    print(" daily_signals:", daily_signals.price)
+    print(" daily_signals:", daily_signals.signal)
+
+
+@scheduler.task('interval', id='do_job_2', seconds=30, misfire_grace_time=900)
+def check_profit_or_loss_job():
+    print('\n:check_profit_or_loss_job:')
+    # Get Current Positions
+    tm.tracking_current_position_profit_loss()
+
+
+@scheduler.task('interval', id='do_job_3', seconds=30, misfire_grace_time=900)
+def list_future_positions_job():
+    print('\n:list_future_positions_job:')
+    # Get Current Positions
+    future_positions = cbapi.list_future_positions()
+    # pp(future_positions)
+
+    cbapi.store_future_positions(future_positions)
+
+
+@scheduler.task('interval', id='do_job_4', seconds=60, misfire_grace_time=900)
+def list_future_positions_job():
+    print('\n:get_balance_summary_job:')
+    # Balance Summary get and store
+    futures_balance = cbapi.get_balance_summary()
+    # pp(futures_balance)
+
+    cbapi.store_futures_balance_summary(futures_balance)
+
+
+# if you don't wanna use a config, you can set options here:
+# scheduler.api_enabled = True
+scheduler.init_app(app)
+scheduler.start()
 
 if __name__ == '__main__':
     print(":", __name__, ":")
 
     # Note: On PythonAnywhere or other production environments, you might not need to run the app like this.
-    app.run(debug=True, port=5000)
+    app.run(use_reloader=False, debug=True, port=5000)

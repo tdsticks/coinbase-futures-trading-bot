@@ -28,4 +28,4 @@ class FuturePriceAtSignal(db.Model):
     future = db.relationship('CoinbaseFuture', backref=db.backref('signal_prices', lazy=True))
 
     def __repr__(self):
-        return f"<FuturePriceAtSignal bid={self.bid_price} ask={self.ask_price} signal_id={self.signal_id} future_id={self.future_id}>"
+        return f"<FuturePriceAtSignal bid={self.future_bid_price} ask={self.future_ask_price} signal_id={self.signal_id} future_id={self.future_id}>"

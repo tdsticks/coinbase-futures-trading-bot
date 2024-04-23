@@ -1,4 +1,5 @@
 from db import db
+from datetime import datetime
 
 
 class CoinbaseFuture(db.Model):
@@ -46,6 +47,28 @@ class AccountBalanceSummary(db.Model):
 
     def __repr__(self):
         return f'<AccountBalanceSummary {self.id} - Total CFM USD Balance: {self.cfm_usd_balance}>'
+
+
+class FuturesOrder(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.String(128), nullable=True)
+    product_id = db.Column(db.String(128), nullable=True)
+    side = db.Column(db.String(32), nullable=True)
+    client_order_id = db.Column(db.String(128), nullable=True)
+    success = db.Column(db.Boolean, nullable=False, default=False)
+    failure_reason = db.Column(db.String(255), nullable=True)
+    error_message = db.Column(db.String(255), nullable=True)
+    error_details = db.Column(db.String(255), nullable=True)
+    order_type = db.Column(db.String(128), nullable=True)
+    quote_size = db.Column(db.String(128), nullable=True)
+    base_size = db.Column(db.String(128), nullable=True)
+    limit_price = db.Column(db.String(128), nullable=True)
+    # stop_price = db.Column(db.String(128), nullable=True)
+    post_only = db.Column(db.Boolean, nullable=True)
+    end_time = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f'<FuturesOrder {self.order_id} - {self.product_id} - {self.side}>'
 
 
 class FuturePosition(db.Model):

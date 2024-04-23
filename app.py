@@ -214,7 +214,7 @@ def webhook():
 scheduler = APScheduler()
 
 
-@scheduler.task('interval', id='do_job_1', seconds=5, misfire_grace_time=900)
+@scheduler.task('interval', id='do_job_1', seconds=10, misfire_grace_time=900)
 def check_trading_conditions_job():
     print('\n:check_trading_conditions_job:')
 

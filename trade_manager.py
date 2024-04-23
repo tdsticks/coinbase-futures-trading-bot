@@ -2,8 +2,9 @@ from coinbase.rest import RESTClient
 from coinbase.websocket import (WSClient, WSClientConnectionClosedException,
                                 WSClientException)
 from models.signals import AuroxSignal, FuturePriceAtSignal
-from models.futures import CoinbaseFuture, AccountBalanceSummary, FuturePosition
-from db import db, db_errors, or_
+from models.futures import (CoinbaseFuture, AccountBalanceSummary,
+                            FuturePosition, FuturesOrder)
+from db import db, db_errors, joinedload
 from dotenv import load_dotenv
 from pprint import pprint as pp
 import datetime
@@ -306,9 +307,6 @@ class CoinbaseAdvAPI:
 
         return list_orders
 
-    def store_orders(self, orders):
-        print(":store_orders:")
-
     def list_future_positions(self):
         print(":list_future_positions:")
 
@@ -385,7 +383,7 @@ class CoinbaseAdvAPI:
     def generate_uuid4():
         return uuid.uuid4()
 
-    def create_order(self, side, product_id, size, limit_price, leverage="3", order_type='market_market_ioc'):
+    def create_order(self, side, product_id, size, limit_price=None, leverage="3", order_type='market_market_ioc'):
         print(":create_order:")
 
         # client_order_id
@@ -432,36 +430,136 @@ class CoinbaseAdvAPI:
         # TODO: Need to store this value in the DB
         # Generate and print a UUID4
         client_order_id = self.generate_uuid4()
-        print("Generated client_order_id:", client_order_id)
+        # print("Generated client_order_id:", client_order_id)
 
         order_configuration = {
             "order_configuration": {
                 order_type: {}
             },
             "side": side,
-            "leverage": leverage
+            "leverage": leverage,
+            "client_order_id": str(client_order_id)
         }
+
+        quote_size = ""
+        base_size = ""
+        post_only = False
+
         if side == "BUY":
-            order_configuration['order_configuration'][order_type]["quote_size"] = str(size)
+            quote_size = str(size)
+            order_configuration['order_configuration'][order_type]["quote_size"] = quote_size
         elif side == "SELL":
-            order_configuration['order_configuration'][order_type]["base_size"] = str(size)
+            base_size = str(size)
+            order_configuration['order_configuration'][order_type]["base_size"] = base_size
 
         if 'limit' in order_type:
             order_configuration['order_configuration'][order_type]["limit_price"] = limit_price
-            order_configuration['order_configuration'][order_type]["post_only"] = "false"
+            order_configuration['order_configuration'][order_type]["post_only"] = post_only
         print("order_configuration:", order_configuration)
 
+        order_for_storing = {
+            "order_id": None,
+            "product_id": product_id,
+            "side": side,
+            "client_order_id": str(client_order_id),
+            "success": False,
+            "failure_reason": None,
+            "error_message": None,
+            "error_details": None,
+            "order_type": order_type,
+            "quote_size": quote_size,
+            "base_size": base_size,
+            "limit_price": limit_price,
+            "post_only": post_only,
+            "end_time": None
+        }
+        pp(order_for_storing)
+
+        self.store_order(order_for_storing)
+
+        # order_created = self.client.create_order(client_order_id=client_order_id,
+        #                                          product_id=product_id,
+        #                                          side=side,
+        #                                          order_configuration=order_configuration)
+
         # TODO: Store in database
 
-        order_created = self.client.create_order(client_order_id=client_order_id,
-                                                 product_id=product_id,
-                                                 side=side,
-                                                 order_configuration=order_configuration)
-        # TODO: Store in database
+        # print("order_created:", order_created)
 
-        print("order_created:", order_created)
+        # order_for_storing = {
+        #     "order_id": order_created['order_id'],
+        #     "product_id": product_id,
+        #     "side": side,
+        #     "client_order_id": str(client_order_id),
+        #     "success": order_created['success'],
+        #     "failure_reason": order_created['failure_reason'],
+        #     "error_message": order_created['error_message'],
+        #     "error_details": order_created['error_details'],
+        #     "order_type": order_type,
+        #     "quote_size": quote_size,
+        #     "base_size": base_size,
+        #     "limit_price": limit_price,
+        #     "post_only": post_only,
+        #     "end_time": order_created['end_time'],
+        # }
+        # pp(order_for_storing)
 
-        return order_created
+        # return order_created
+
+    def store_order(self, order_data):
+        print(":store_order:")
+        # print("order_data:", order_data)
+
+        with self.flask_app.app_context():  # Push an application context
+            try:
+                client_order_id = order_data['client_order_id']
+
+                if client_order_id:
+                    # Query for an existing order
+                    order = FuturesOrder.query.filter_by(client_order_id=client_order_id).first()
+
+                    if order:
+                        # Order exists, update its details
+                        order.order_id = order_data['order_id']
+                        order.product_id = order_data['product_id']
+                        order.side = order_data['side']
+                        # order.client_order_id = order_data['client_order_id'],
+                        order.failure_reason = order_data['failure_reason']
+                        order.error_message = order_data['error_message']
+                        order.error_details = order_data['error_details']
+                        order.order_type = order_data["order_type"]
+                        order.quote_size=order_data["quote_size"]
+                        order.base_size = order_data["base_size"]
+                        order.limit_price = order_data["limit_price"]
+                        order.post_only = order_data["post_only"]
+                        order.end_time = order_data["end_time"]
+                    else:
+                        # No existing order, create a new one
+                        order = FuturesOrder(
+                            product_id=order_data['product_id'],
+                            side=order_data["side"],
+                            client_order_id=order_data['client_order_id'],
+                            success=order_data["success"],
+                            failure_reason=order_data["failure_reason"],
+                            error_message=order_data["error_message"],
+                            error_details=order_data["error_details"],
+                            order_type=order_data["order_type"],
+                            quote_size=order_data["quote_size"],
+                            base_size=order_data["base_size"],
+                            limit_price=order_data["limit_price"],
+                            post_only=order_data["post_only"],
+                            end_time=order_data["end_time"]
+                        )
+                        db.session.add(order)
+
+                    # Commit changes or new entry to the database
+                    db.session.commit()
+                    print(f"Order Client ID:{client_order_id} processed: {'updated' if order.id else 'created'}")
+                else:
+                    print("No order ID provided or order creation failed. Check input data.")
+            except db_errors as e:
+                print(f"Error fetching latest daily signal: {str(e)}")
+                return None
 
     def edit_order(self, side, product_id):
         print(":edit_order:")
@@ -574,7 +672,9 @@ class TradeManager:
     def get_latest_weekly_signal(self):
         print(":get_latest_weekly_signal:")
         with self.flask_app.app_context():
+            # Query the latest weekly signal including related future price data
             latest_signal = AuroxSignal.query \
+                .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '1 Week') \
                 .order_by(AuroxSignal.timestamp.desc()) \
                 .first()
@@ -584,6 +684,7 @@ class TradeManager:
         print(":get_latest_daily_signal:")
         with self.flask_app.app_context():
             latest_signal = AuroxSignal.query \
+                .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '1 Day') \
                 .order_by(AuroxSignal.timestamp.desc()) \
                 .first()
@@ -730,17 +831,25 @@ class TradeManager:
 
             weekly_signals = self.get_latest_weekly_signal()
             daily_signals = self.get_latest_daily_signal()
+            # print(f" Weekly: Signal:{weekly_signals.signal} | Date:{weekly_signals.timestamp} "
+            #       f"| Price:${weekly_signals.price}")
+            # print(f" Daily: Signal:{daily_signals.signal} | Date:{daily_signals.timestamp} "
+            #       f"| Price:${daily_signals.price}")
+
+            # Convert weekly and daily signals to a datetime object
+            weekly_signals_dt = datetime.datetime.strptime(weekly_signals.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+            daily_signals_dt = datetime.datetime.strptime(daily_signals.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+            daily_signals_dt = daily_signals_dt.replace(tzinfo=pytz.utc)  # Make it timezone-aware
+
+            # Show the Weekly and Daily Signal information
+            weekly_ts_formatted = weekly_signals_dt.strftime("%B %d, %Y, %I:%M %p")
+            daily_ts_formatted = daily_signals_dt.strftime("%B %d, %Y, %I:%M %p")
 
             # FOR TESTING
-            weekly_signals.signal = daily_signals.signal = "long"
+            # weekly_signals.signal = daily_signals.signal = "long"
 
             if weekly_signals.signal == daily_signals.signal:
                 print("\n>>> Weekly and Daily signals align, see if we should place a trade")
-
-                # Convert weekly and daily signals to a datetime object
-                weekly_signals_dt = datetime.datetime.strptime(weekly_signals.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
-                daily_signals_dt = datetime.datetime.strptime(daily_signals.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
-                daily_signals_dt = daily_signals_dt.replace(tzinfo=pytz.utc)  # Make it timezone-aware
 
                 # Current time in UTC
                 now = datetime.datetime.now(pytz.utc)
@@ -752,25 +861,40 @@ class TradeManager:
                 days = time_diff.days
 
                 # FOR TESTING
-                days = 1
+                # days = 1
 
                 # Calculate hours, minutes, seconds from the total seconds
                 total_seconds = time_diff.total_seconds()
-                # Total seconds divided by number of seconds in an hour
-                hours = int(total_seconds // 3600)
-                # Remainder from hours divided by number of seconds in a minute
-                minutes = int((total_seconds % 3600) // 60)
-                # Remainder from minutes
-                seconds = int(total_seconds % 60)
+                hours = int(total_seconds // 3600)  # Total seconds divided by number of seconds in an hour
+                minutes = int((total_seconds % 3600) // 60)  # Remainder from hrs divided by number of secs in a min
+                seconds = int(total_seconds % 60)  # Remainder from minutes
 
                 if days <= 1:
                     print(">>> We should place a trade!")
 
+                    for future_price in weekly_signals.future_prices:
+                        weekly_signal_spot_price = future_price.signal_spot_price
+                        weekly_future_bid_price = future_price.future_bid_price
+                        weekly_future_ask_price = future_price.future_ask_price
+                        weekly_future_avg_price = (weekly_future_bid_price + weekly_future_ask_price) / 2
+
+                    for future_price in daily_signals.future_prices:
+                        daily_signal_spot_price = future_price.signal_spot_price
+                        daily_future_bid_price = future_price.future_bid_price
+                        daily_future_ask_price = future_price.future_ask_price
+                        daily_future_avg_price = (daily_future_bid_price + daily_future_ask_price) / 2
+
                     # Show the Weekly and Daily Signal information
-                    weekly_ts_formatted = weekly_signals_dt.strftime("%B %d, %Y, %I:%M %p")
-                    daily_ts_formatted = daily_signals_dt.strftime("%B %d, %Y, %I:%M %p")
-                    print(f" Weekly: Signal:{weekly_signals.signal} | Date:{weekly_ts_formatted} | Price:${weekly_signals.price}")
-                    print(f" Daily: Signal:{daily_signals.signal} | Date:{daily_ts_formatted} | Price:${daily_signals.price}")
+                    # weekly_ts_formatted = weekly_signals_dt.strftime("%B %d, %Y, %I:%M %p")
+                    # daily_ts_formatted = daily_signals_dt.strftime("%B %d, %Y, %I:%M %p")
+                    print(f" WEEKLY: Signal: {weekly_signals.signal} | "
+                          f"Date: {weekly_ts_formatted} | "
+                          f"Spot Price: ${weekly_signal_spot_price} | "
+                          f"Future Price: ${weekly_future_avg_price}")
+                    print(f" DAILY: Signal: {daily_signals.signal} | "
+                          f"Date: {daily_ts_formatted} | "
+                          f"Spot Price: ${daily_signal_spot_price} | "
+                          f"Future Price: ${daily_future_avg_price}")
 
                     #######################
                     # Now lets check the Futures market
@@ -778,21 +902,44 @@ class TradeManager:
 
                     # Get Current Bid Ask Prices
                     current_future_product = self.cb_adv_api.get_this_months_future()
-                    print(" current_future_product:", current_future_product.product_id)
+                    # print(" current_future_product:", current_future_product.product_id)
 
-                    future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(current_future_product.product_id)
-                    future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
-                    future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
-                    print(f" {current_future_product.product_id}: bid: {future_bid_price} ask: {future_ask_price}")
+                    cur_future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(current_future_product.product_id)
+                    cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+                    cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+                    print(f" Prd: {current_future_product.product_id} - "
+                          f"Current Futures: bid: ${cur_future_bid_price} "
+                          f"ask: ${cur_future_ask_price}")
 
+                    # TODO: Place a market trade
+
+                    # long = BUY
+                    # short = SELL
+                    trade_side = ""
+
+                    if daily_signals.signal == "long":
+                        trade_side = "BUY"
+                    elif daily_signals.signal == "short":
+                        trade_side = "SELL"
+                    size = "1"
+
+                    order_type = "market_market_ioc"
+
+                    order_created = self.cb_adv_api.create_order(side=trade_side,
+                                                                 product_id=current_future_product.product_id,
+                                                                 size=size,
+                                                                 limit_price=None,
+                                                                 leverage="3",
+                                                                  order_type=order_type)
+                    # print("order_created:", order_created)
 
                 else:
                     print("Too far of gab between the last daily and today")
                     print(f"Time difference: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
             else:
                 print("Weekly Signal and Daily Signal DO NOT align, let's wait...")
-                print(" weekly_signals:", weekly_signals.signal)
-                print(" daily_signals:", daily_signals.signal)
+                print(f"    Weekly | Signal: {weekly_signals.signal} | Date: {weekly_ts_formatted}")
+                print(f"    Daily | Signal: {daily_signals.signal} | Date: {daily_ts_formatted}")
 
 
 if __name__ == "__main__":

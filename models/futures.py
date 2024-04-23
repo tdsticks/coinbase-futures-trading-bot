@@ -63,6 +63,7 @@ class FuturesOrder(db.Model):
     quote_size = db.Column(db.String(128), nullable=True)
     base_size = db.Column(db.String(128), nullable=True)
     limit_price = db.Column(db.String(128), nullable=True)
+    leverage = db.Column(db.String(128), nullable=True)
     # stop_price = db.Column(db.String(128), nullable=True)
     post_only = db.Column(db.Boolean, nullable=True)
     end_time = db.Column(db.DateTime, nullable=True)

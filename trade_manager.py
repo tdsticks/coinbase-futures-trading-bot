@@ -83,7 +83,7 @@ class CoinbaseAdvAPI:
         return get_products
 
     def store_btc_futures_products(self, future_products):
-        # print(":store_btc_futures_products:")
+        print(":store_btc_futures_products:")
         # print("future_products:", future_products, type(future_products))
 
         for future in future_products['products']:
@@ -186,11 +186,16 @@ class CoinbaseAdvAPI:
 
                 if existing_balance_summary:
                     # Update existing record
-                    existing_balance_summary[0].available_margin = float(balance_summary_data['available_margin']['value'])
-                    existing_balance_summary[0].cbi_usd_balance = float(balance_summary_data['cbi_usd_balance']['value'])
-                    existing_balance_summary[0].cfm_usd_balance = float(balance_summary_data['cfm_usd_balance']['value'])
-                    existing_balance_summary[0].daily_realized_pnl = float(balance_summary_data['daily_realized_pnl']['value'])
-                    existing_balance_summary[0].futures_buying_power = float(balance_summary_data['futures_buying_power']['value'])
+                    existing_balance_summary[0].available_margin = float(
+                        balance_summary_data['available_margin']['value'])
+                    existing_balance_summary[0].cbi_usd_balance = float(
+                        balance_summary_data['cbi_usd_balance']['value'])
+                    existing_balance_summary[0].cfm_usd_balance = float(
+                        balance_summary_data['cfm_usd_balance']['value'])
+                    existing_balance_summary[0].daily_realized_pnl = float(
+                        balance_summary_data['daily_realized_pnl']['value'])
+                    existing_balance_summary[0].futures_buying_power = float(
+                        balance_summary_data['futures_buying_power']['value'])
                     existing_balance_summary[0].initial_margin = float(balance_summary_data['initial_margin']['value'])
                     existing_balance_summary[0].liquidation_buffer_amount = float(
                         balance_summary_data['liquidation_buffer_amount']['value'])
@@ -200,7 +205,8 @@ class CoinbaseAdvAPI:
                         balance_summary_data['liquidation_threshold']['value'])
                     existing_balance_summary[0].total_open_orders_hold_amount = float(
                         balance_summary_data['total_open_orders_hold_amount']['value'])
-                    existing_balance_summary[0].total_usd_balance = float(balance_summary_data['total_usd_balance']['value'])
+                    existing_balance_summary[0].total_usd_balance = float(
+                        balance_summary_data['total_usd_balance']['value'])
                     existing_balance_summary[0].unrealized_pnl = float(balance_summary_data['unrealized_pnl']['value'])
                     print("Updated existing balance summary")
                 else:
@@ -215,7 +221,8 @@ class CoinbaseAdvAPI:
                         liquidation_buffer_amount=float(balance_summary_data['liquidation_buffer_amount']['value']),
                         liquidation_buffer_percentage=int(balance_summary_data['liquidation_buffer_percentage']),
                         liquidation_threshold=float(balance_summary_data['liquidation_threshold']['value']),
-                        total_open_orders_hold_amount=float(balance_summary_data['total_open_orders_hold_amount']['value']),
+                        total_open_orders_hold_amount=float(
+                            balance_summary_data['total_open_orders_hold_amount']['value']),
                         total_usd_balance=float(balance_summary_data['total_usd_balance']['value']),
                         unrealized_pnl=float(balance_summary_data['unrealized_pnl']['value']),
                     )
@@ -330,9 +337,10 @@ class CoinbaseAdvAPI:
         print(":store_future_positions:")
         # print("p_list_futures_positions:", p_list_futures_positions)
         # Clear existing positions
-        with self.flask_app.app_context():  # Push an application context
+        with (self.flask_app.app_context()):  # Push an application context
             try:
-                if p_list_futures_positions and 'positions' in p_list_futures_positions and p_list_futures_positions['positions']:
+                if p_list_futures_positions and 'positions' in p_list_futures_positions and p_list_futures_positions[
+                    'positions']:
                     # Clear existing positions
                     db.session.query(FuturePosition).delete()
                     for future in p_list_futures_positions['positions']:
@@ -383,8 +391,18 @@ class CoinbaseAdvAPI:
     def generate_uuid4():
         return uuid.uuid4()
 
+    @staticmethod
+    def adjust_price_to_nearest_increment(price, increment=5):
+        # Round the price to the nearest increment
+        return str(round(price / increment) * increment)
+
     def create_order(self, side, product_id, size, limit_price=None, leverage="3", order_type='market_market_ioc'):
         print(":create_order:")
+        # print(f"    order_type: {order_type} "
+        #       f"side: {side}, "
+        #       f"product_id: {product_id}, "
+        #       f"size: {size}, "
+        #       f"leverage: {leverage}")
 
         # client_order_id
         #   A unique ID provided by the client for their own identification purposes.
@@ -417,6 +435,9 @@ class CoinbaseAdvAPI:
         #   stop_limit_stop_limit_gtc
         #   stop_limit_stop_limit_gtd
 
+        # Limit Price
+        # Needs to be string with no decimals
+
         # quote_size
         # Amount of quote currency to spend on order. Required for BUY orders.
 
@@ -430,38 +451,32 @@ class CoinbaseAdvAPI:
         # TODO: Need to store this value in the DB
         # Generate and print a UUID4
         client_order_id = self.generate_uuid4()
-        # print("Generated client_order_id:", client_order_id)
+        print("Generated client_order_id:", client_order_id, type(client_order_id))
 
-        order_configuration = {
-            "order_configuration": {
-                order_type: {}
-            },
-            "side": side,
-            "leverage": leverage,
-            "client_order_id": str(client_order_id)
-        }
+        # Convert UUID to a string
+        client_order_id_str = str(client_order_id)
+        print("Client Order ID as string:", client_order_id_str)
 
-        quote_size = ""
-        base_size = ""
+        quote_size = ''
+        base_size = ''
         post_only = False
 
-        if side == "BUY":
-            quote_size = str(size)
-            order_configuration['order_configuration'][order_type]["quote_size"] = quote_size
-        elif side == "SELL":
+        if order_type == 'limit_limit_gtc':
             base_size = str(size)
-            order_configuration['order_configuration'][order_type]["base_size"] = base_size
+        elif order_type == 'market_market_ioc':
+            if side == "BUY":
+                quote_size = str(size)
+            elif side == "SELL":
+                base_size = str(size)
 
-        if 'limit' in order_type:
-            order_configuration['order_configuration'][order_type]["limit_price"] = limit_price
-            order_configuration['order_configuration'][order_type]["post_only"] = post_only
-        print("order_configuration:", order_configuration)
+        # print("order_configuration:")
+        # pp(order_configuration)
 
-        order_for_storing = {
+        pre_order_for_storing = {
             "order_id": None,
             "product_id": product_id,
             "side": side,
-            "client_order_id": str(client_order_id),
+            "client_order_id": client_order_id_str,
             "success": False,
             "failure_reason": None,
             "error_message": None,
@@ -470,53 +485,112 @@ class CoinbaseAdvAPI:
             "quote_size": quote_size,
             "base_size": base_size,
             "limit_price": limit_price,
+            "leverage": leverage,
             "post_only": post_only,
             "end_time": None
         }
-        pp(order_for_storing)
+        # print("pre_order_for_storing:")
+        # pp(pre_order_for_storing)
 
-        self.store_order(order_for_storing)
+        self.store_order(pre_order_for_storing)
 
-        # order_created = self.client.create_order(client_order_id=client_order_id,
-        #                                          product_id=product_id,
-        #                                          side=side,
-        #                                          order_configuration=order_configuration)
+        try:
+            order_created = {}
+            if side == "BUY" and order_type == 'limit_limit_gtc':
+                order_created = self.client.limit_order_gtc_buy(client_order_id=client_order_id_str,
+                                                                product_id=product_id,
+                                                                base_size=base_size,
+                                                                # leverage=leverage,
+                                                                limit_price=limit_price)
 
-        # TODO: Store in database
+            elif side == "SELL" and order_type == 'limit_limit_gtc':
+                order_created = self.client.limit_order_gtc_sell(client_order_id=client_order_id_str,
+                                                                 product_id=product_id,
+                                                                 base_size=base_size,
+                                                                 # leverage=leverage,
+                                                                 limit_price=limit_price)
 
-        # print("order_created:", order_created)
+            elif side == "BUY" and order_type == 'market_market_ioc':
+                order_created = self.client.market_order_buy(client_order_id=client_order_id_str,
+                                                             product_id=product_id,
+                                                             # leverage=leverage,
+                                                             quote_size=quote_size)
 
-        # order_for_storing = {
-        #     "order_id": order_created['order_id'],
-        #     "product_id": product_id,
-        #     "side": side,
-        #     "client_order_id": str(client_order_id),
-        #     "success": order_created['success'],
-        #     "failure_reason": order_created['failure_reason'],
-        #     "error_message": order_created['error_message'],
-        #     "error_details": order_created['error_details'],
-        #     "order_type": order_type,
-        #     "quote_size": quote_size,
-        #     "base_size": base_size,
-        #     "limit_price": limit_price,
-        #     "post_only": post_only,
-        #     "end_time": order_created['end_time'],
-        # }
-        # pp(order_for_storing)
+            elif side == "SELL" and order_type == 'market_market_ioc':
+                order_created = self.client.market_order_sell(client_order_id=client_order_id_str,
+                                                              product_id=product_id,
+                                                              # leverage=leverage,
+                                                              base_size=base_size)
+            # print("\norder_created:")
+            # pp(order_created)
 
-        # return order_created
+            if order_created.get('success'):
+                print("Order successfully created:")
+                pp(order_created.get('success_response'))
+
+            if order_created.get('failure_reason'):
+                print("Order creation failed:")
+                print("Failure Reason:", order_created.get('failure_reason'))
+                if order_created.get('error_response'):
+                    print("Error Message:", order_created.get('error_response').get('message'))
+                    print("Error Details:", order_created.get('error_response').get('error_details'))
+                else:
+                    print("No detailed error message provided.")
+
+            post_order_for_storing = {
+                "order_id": order_created['order_id'],
+                "product_id": product_id,
+                "side": side,
+                "client_order_id": client_order_id_str,
+                "success": order_created['success'],
+                "order_type": order_type,
+                "quote_size": quote_size,
+                "base_size": base_size,
+                "limit_price": limit_price,
+                "leverage": leverage,
+                "post_only": post_only
+            }
+
+            if "failure_reason" in order_created:
+                post_order_for_storing["failure_reason"] = order_created['failure_reason']
+            else:
+                post_order_for_storing["failure_reason"] = None
+
+            if "error_message" in order_created:
+                post_order_for_storing["error_message"] = order_created['error_message']
+            else:
+                post_order_for_storing["error_message"] = None
+
+            if "error_details" in order_created:
+                post_order_for_storing["error_details"] = order_created['error_details']
+            else:
+                post_order_for_storing["error_details"] = None
+
+            if "end_time" in order_created:
+                post_order_for_storing["end_time"] = order_created['end_time']
+            else:
+                post_order_for_storing["end_time"] = None
+            # pp(post_order_for_storing)
+
+            self.store_order(post_order_for_storing)
+
+            print("Order Created and Store in the DB")
+        except Exception as e:
+            print(f"Failed to create order {pre_order_for_storing}: {e}")
 
     def store_order(self, order_data):
-        print(":store_order:")
+        print("\n:store_order:")
         # print("order_data:", order_data)
 
         with self.flask_app.app_context():  # Push an application context
             try:
                 client_order_id = order_data['client_order_id']
+                # print(" client_order_id:", client_order_id)
 
                 if client_order_id:
                     # Query for an existing order
                     order = FuturesOrder.query.filter_by(client_order_id=client_order_id).first()
+                    # print(" found order:", order)
 
                     if order:
                         # Order exists, update its details
@@ -524,13 +598,15 @@ class CoinbaseAdvAPI:
                         order.product_id = order_data['product_id']
                         order.side = order_data['side']
                         # order.client_order_id = order_data['client_order_id'],
+                        order.success = order_data['success']
                         order.failure_reason = order_data['failure_reason']
                         order.error_message = order_data['error_message']
                         order.error_details = order_data['error_details']
                         order.order_type = order_data["order_type"]
-                        order.quote_size=order_data["quote_size"]
+                        order.quote_size = order_data["quote_size"]
                         order.base_size = order_data["base_size"]
                         order.limit_price = order_data["limit_price"]
+                        order.leverage = order_data["leverage"]
                         order.post_only = order_data["post_only"]
                         order.end_time = order_data["end_time"]
                     else:
@@ -547,6 +623,7 @@ class CoinbaseAdvAPI:
                             quote_size=order_data["quote_size"],
                             base_size=order_data["base_size"],
                             limit_price=order_data["limit_price"],
+                            leverage=order_data["leverage"],
                             post_only=order_data["post_only"],
                             end_time=order_data["end_time"]
                         )
@@ -554,11 +631,15 @@ class CoinbaseAdvAPI:
 
                     # Commit changes or new entry to the database
                     db.session.commit()
-                    print(f"Order Client ID:{client_order_id} processed: {'updated' if order.id else 'created'}")
+
+                    # TODO: Should switch to logging for these
+
+                    print(f"    Order Client ID:{client_order_id} processed: {'updated' if order.id else 'created'}")
                 else:
-                    print("No order ID provided or order creation failed. Check input data.")
+                    print(" No order ID provided or order creation failed. Check input data.")
             except db_errors as e:
-                print(f"Error fetching latest daily signal: {str(e)}")
+                print(f"    Error either getting or storing the Order record: {str(e)}")
+                db.session.rollback()
                 return None
 
     def edit_order(self, side, product_id):
@@ -715,7 +796,7 @@ class TradeManager:
             print("No daily signal found.")
 
     def check_for_contract_expires(self):
-        print(":check_for_contract_expires:")
+        # print(":check_for_contract_expires:")
 
         # NOTE: Futures markets are open for trading from Sunday 6 PM to
         #  Friday 5 PM ET (excluding observed holidays),
@@ -742,70 +823,27 @@ class TradeManager:
 
             # Check if the contract has expired
             if time_diff.total_seconds() <= 0:
+                print("\n-----------------------------------")
                 print("Contract has expired, close trades.")
                 # Here you would add code to handle closing trades
                 print(">>> Close out any positions!!!")
+                print("-----------------------------------")
             else:
                 days = time_diff.days
                 hours, remainder = divmod(time_diff.seconds, 3600)
                 minutes, seconds = divmod(remainder, 60)
-                print(
-                    f"\nContract for:"
+                print("\n-----------------------------------")
+                print(f"Contract for:"
                     f"  {current_future_product.product_id}\n"
                     f"  Month: {current_month} \n"
                     f"  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds.")
+                print("-----------------------------------")
+
         else:
             print(" No future product found for this month.")
 
-    def tracking_current_position_profit_loss(self):
-        print(":tracking_current_position_profit_loss:")
-
-        current_future = self.cb_adv_api.get_this_months_future()
-        future_position = self.cb_adv_api.get_future_position(product_id=current_future.product_id)
-
-        # Only run if we have ongoing positions
-        if future_position['position']:
-            current_future_product = self.cb_adv_api.get_current_future_product(current_future.product_id)
-            contract_size = future_position['position']['number_of_contracts']
-            print(" contract_size:", contract_size)
-
-            product_contract_size = current_future_product.contract_size
-            avg_entry_price = float(future_position['position']['avg_entry_price']) * product_contract_size
-            current_price = float(future_position['position']['current_price']) * product_contract_size
-            # print("avg_entry_price:", avg_entry_price)
-            # print("current_price:", current_price)
-
-            calc_profit_or_loss = round(avg_entry_price - current_price, 4)
-            # print(f"    calc_profit_or_loss: ${calc_profit_or_loss}")
-
-            # Percentage change: (New Value - Original Value) / Original Value × 100
-            calc_percentage = round((avg_entry_price - current_price) / current_price * 100, 3)
-            # print(f"    calc_percentage: %{calc_percentage}")
-
-            print("Contract Expires on", future_position['position']['expiration_time'])
-
-            # Check when the product contract expires and print it out
-            self.check_for_contract_expires()
-
-            print(">>> Profit / Loss:")
-            if calc_percentage >= 2:
-                print(f"    Take profit at 2% or higher %{calc_percentage}")
-                print(f"    Good Profit: ${calc_profit_or_loss}")
-
-                # client_order_id = '4ef6c115-c5c7-4915-89d1-077b56e79c31'
-                # self.cb_adv_api.close_position(client_order_id, current_future.product_id, contract_size)
-
-            elif 2 > calc_percentage > 0.5:
-                print(f"    Not ready to take profit %{calc_percentage}")
-                print(f"    Ok Profit: ${calc_profit_or_loss}")
-            elif 0.5 >= calc_percentage >= 0:
-                print(f"    Neutral  %{calc_percentage}")
-                print(f"    Not enough profit: ${calc_profit_or_loss}")
-            elif calc_percentage < 0:
-                print(f"    Trade negate %{calc_percentage}")
-                print(f"    No profit, loss of: ${calc_profit_or_loss}")
-        else:
-            print(f"    No open positions: {future_position}")
+    def ladder_orders(self):
+        print(":ladder_orders:")
 
     def check_trading_conditions(self):
         print(":check_trading_conditions:")
@@ -814,19 +852,32 @@ class TradeManager:
         # Do we have an existing trades?
         #######################
 
-        # Get Current Positions
+        # Get Current Positions from API
         future_positions = self.cb_adv_api.list_future_positions()
         # pp(future_positions)
 
         if future_positions['positions']:
-            # Store the active future position
+            print(" >>> We have an active position(s)")
+
+            # Clear and store the active future position
             self.cb_adv_api.store_future_positions(future_positions)
 
-            # TODO: Manage the trade(s) here
+            # Get the position from the database
+            # NOTE: We should only get one if we're only trading one future (BTC)
+            with (self.flask_app.app_context()):  # Push an application context
+                try:
+                    positions = FuturePosition.query.all()
+                    for position in positions:
+                        self.tracking_current_position_profit_loss(position)
+                except Exception as e:
+                    print(f"Unexpected error: {e}")
+
+            # TODO: What do we need to do here? Open DCA here?
 
         else:
             #######################
             # If not, then is it a good time to place a market order?
+            # Let's pull the last weekly and daily signals, check and wait...
             #######################
 
             weekly_signals = self.get_latest_weekly_signal()
@@ -845,22 +896,17 @@ class TradeManager:
             weekly_ts_formatted = weekly_signals_dt.strftime("%B %d, %Y, %I:%M %p")
             daily_ts_formatted = daily_signals_dt.strftime("%B %d, %Y, %I:%M %p")
 
-            # FOR TESTING
+            # FOR TESTING (NOT FOR PRODUCTION)
             # weekly_signals.signal = daily_signals.signal = "long"
 
             if weekly_signals.signal == daily_signals.signal:
                 print("\n>>> Weekly and Daily signals align, see if we should place a trade")
 
-                # Current time in UTC
-                now = datetime.datetime.now(pytz.utc)
+                now = datetime.datetime.now(pytz.utc)  # Current time in UTC
+                time_diff = now - daily_signals_dt  # Calculate time difference
+                days = time_diff.days  # Get the number of days directly
 
-                # Calculate time difference
-                time_diff = now - daily_signals_dt
-
-                # Get the number of days directly
-                days = time_diff.days
-
-                # FOR TESTING
+                # FOR TESTING (NOT FOR PRODUCTION)
                 # days = 1
 
                 # Calculate hours, minutes, seconds from the total seconds
@@ -897,14 +943,17 @@ class TradeManager:
                           f"Future Price: ${daily_future_avg_price}")
 
                     #######################
-                    # Now lets check the Futures market
+                    # Now lets check the Futures market (we should store in logging)
+                    # TODO: Adding Logging
                     #######################
 
-                    # Get Current Bid Ask Prices
+                    # Get this months current product
                     current_future_product = self.cb_adv_api.get_this_months_future()
                     # print(" current_future_product:", current_future_product.product_id)
 
-                    cur_future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(current_future_product.product_id)
+                    # Get Current Bid Ask Prices
+                    cur_future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(
+                        current_future_product.product_id)
                     cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
                     cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
                     print(f" Prd: {current_future_product.product_id} - "
@@ -922,16 +971,20 @@ class TradeManager:
                     elif daily_signals.signal == "short":
                         trade_side = "SELL"
                     size = "1"
+                    leverage = "3"
 
                     order_type = "market_market_ioc"
 
-                    order_created = self.cb_adv_api.create_order(side=trade_side,
-                                                                 product_id=current_future_product.product_id,
-                                                                 size=size,
-                                                                 limit_price=None,
-                                                                 leverage="3",
-                                                                  order_type=order_type)
-                    # print("order_created:", order_created)
+                    # NOTE: Place a market order which should open pretty fast. The scheduler should only run
+                    #   every 30-60 seconds and once a position is open, then this shouldn't run again until
+                    #   that position(s) is closed and we have good signals again.
+
+                    self.cb_adv_api.create_order(side=trade_side,
+                                                 product_id=current_future_product.product_id,
+                                                 size=size,
+                                                 limit_price=None,
+                                                 leverage=leverage,
+                                                 order_type=order_type)
 
                 else:
                     print("Too far of gab between the last daily and today")
@@ -940,6 +993,81 @@ class TradeManager:
                 print("Weekly Signal and Daily Signal DO NOT align, let's wait...")
                 print(f"    Weekly | Signal: {weekly_signals.signal} | Date: {weekly_ts_formatted}")
                 print(f"    Daily | Signal: {daily_signals.signal} | Date: {daily_ts_formatted}")
+
+    def tracking_current_position_profit_loss(self, position):
+        print(":tracking_current_position_profit_loss:")
+        # print("position:", position)
+
+        # current_future = self.cb_adv_api.get_this_months_future()
+        # future_position = self.cb_adv_api.get_future_position(product_id=current_future.product_id)
+
+        # TODO: Need to get Client Order IDs for all open contracts in order to close them directly
+
+        # Only run if we have ongoing positions
+        if position:
+            # current_future_product = self.cb_adv_api.get_current_future_product(current_future.product_id)
+            current_future_product = self.cb_adv_api.get_current_future_product(position.product_id)
+            product_contract_size = current_future_product.contract_size
+            # print(" product_contract_size:", product_contract_size)
+
+            # avg_entry_price = float(future_position['position']['avg_entry_price']) * product_contract_size
+            avg_entry_price = float(position.avg_entry_price) * product_contract_size
+            # print(" avg_entry_price:", avg_entry_price)
+
+            # current_price = float(future_position['position']['current_price']) * product_contract_size
+            current_price = float(position.current_price) * product_contract_size
+            # print(" current_price:", current_price)
+
+            # number_of_contracts = future_position['position']['number_of_contracts']
+            number_of_contracts = position.number_of_contracts
+            # print(" number_of_contracts:", number_of_contracts)
+
+            # Calculate total cost and current value per contract
+            total_initial_cost = avg_entry_price * number_of_contracts
+            total_current_value = current_price * number_of_contracts
+            # print(" total_initial_cost:", total_initial_cost)
+            # print(" total_current_value:", total_current_value)
+
+            # Calculate profit or loss for all contracts
+            calc_profit_or_loss = round((avg_entry_price - current_price) * number_of_contracts, 4)
+            # calc_profit_or_loss = round(avg_entry_price - current_price, 4) * number_of_contracts
+            # print(f" calc_profit_or_loss: ${calc_profit_or_loss:.2f}")
+
+            # Percentage change: (New Value - Original Value) / Original Value × 100
+            if total_initial_cost != 0:  # Prevent division by zero
+                # calc_percentage = round((avg_entry_price - current_price) / current_price * 100, 3)
+                calc_percentage = round((calc_profit_or_loss / total_initial_cost) * 100, 3)
+            else:
+                calc_percentage = 0
+            print(f" calc_percentage: %{calc_percentage}")
+
+            # print("Contract Expires on", future_position['position']['expiration_time'])
+            print(" Contract Expires on", position.expiration_time)
+
+            # Check when the product contract expires and print it out
+            self.check_for_contract_expires()
+
+            print("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+            print(">>> Profit / Loss <<<")
+            if calc_percentage >= 2:
+                print(f"    Take profit at 2% or higher %{calc_percentage}")
+                print(f"    Good Profit: ${calc_profit_or_loss:.2f}")
+
+                # client_order_id = '4ef6c115-c5c7-4915-89d1-077b56e79c31'
+                # self.cb_adv_api.close_position(client_order_id, current_future.product_id, contract_size)
+
+            elif 2 > calc_percentage > 0.5:
+                print(f"    Not ready to take profit %{calc_percentage}")
+                print(f"    Ok Profit: ${calc_profit_or_loss:.2f}")
+            elif 0.5 >= calc_percentage >= 0:
+                print(f"    Neutral  %{calc_percentage}")
+                print(f"    Not enough profit: ${calc_profit_or_loss:.2f}")
+            elif calc_percentage < 0:
+                print(f"    Trade negate %{calc_percentage}")
+                print(f"    No profit, loss of: ${calc_profit_or_loss:.2f}")
+            print(">>>>>>>>>>>>>>>>>>>>>>>>>>>")
+        else:
+            print(f"    No open positions: {position}")
 
 
 if __name__ == "__main__":

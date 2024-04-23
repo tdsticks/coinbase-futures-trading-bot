@@ -120,9 +120,6 @@ def webhook():
 
 
 #######################
-# Get the latest Weekly and Daily signals, then
-# compare the Daily to today's date. Do we need to know this?
-
 # TODO: Now we know if we're within range of the last Daily
 #   and should have placed an order (market?)
 #   Do we then place some limit orders for spikes or bounces?
@@ -147,7 +144,6 @@ def webhook():
 # Get the the future products for BTC and store in DB
 # Then using this months future product, get the bid and ask prices
 # TODO: This should run once a day in the morning.
-#  Setup as a Pythonanywhere cron task within a Flask route
 # list_future_products = cbapi.list_products("FUTURE")
 # pp(list_future_products)
 # cbapi.store_btc_futures_products(list_future_products)
@@ -214,7 +210,17 @@ def webhook():
 scheduler = APScheduler()
 
 
-@scheduler.task('interval', id='do_job_1', seconds=10, misfire_grace_time=900)
+# Runs every 6 hours
+@scheduler.task('interval', id='do_job_0', seconds=21600, misfire_grace_time=900)
+def check_coinbase_futures_products_job():
+    print('\n:check_coinbase_futures_products_job:')
+
+    list_future_products = cbapi.list_products("FUTURE")
+    # pp(list_future_products)
+    cbapi.store_btc_futures_products(list_future_products)
+
+
+@scheduler.task('interval', id='do_job_1', seconds=60, misfire_grace_time=900)
 def check_trading_conditions_job():
     print('\n:check_trading_conditions_job:')
 
@@ -246,6 +252,54 @@ def get_balance_summary_job():
     # pp(futures_balance)
 
     cbapi.store_futures_balance_summary(futures_balance)
+
+
+@scheduler.task('interval', id='do_job_5', seconds=150000, misfire_grace_time=900)
+def test_create_order_job():
+    print('\n:test_create_order_job:')
+
+    # Get this months current product
+    current_future_product = cbapi.get_this_months_future()
+    print(" current_future_product:", current_future_product.product_id)
+
+    # Get Current Bid Ask Prices
+    cur_future_bid_ask_price = cbapi.get_current_bid_ask_prices(
+        current_future_product.product_id)
+    cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+    cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+    print(f" Prd: {current_future_product.product_id} - "
+          f"Current Futures: bid: ${cur_future_bid_price} "
+          f"ask: ${cur_future_ask_price}")
+
+    two_percent_offset = int(float(cur_future_bid_price) * 0.01)
+    print(" two_percent_offset:", two_percent_offset)
+
+    # side = "BUY"
+    side = "SELL"
+
+    if side == "BUY":
+        # BUY / LONG
+        limit_price = cbapi.adjust_price_to_nearest_increment(
+            int(cur_future_bid_price) - two_percent_offset)
+        print(" Buy Long limit_price: $", limit_price)
+    elif side == "SELL":
+        # SELL / SHORT
+        limit_price = cbapi.adjust_price_to_nearest_increment(
+            int(cur_future_bid_price) + two_percent_offset)
+        print(" Sell Short limit_price: $", limit_price)
+
+    size = "1"
+    leverage = "3"
+
+    order_type = "market_market_ioc"
+    # order_type = "limit_limit_gtc"
+
+    # cbapi.create_order(side=side,
+    #                    product_id=current_future_product.product_id,
+    #                    size=size,
+    #                    limit_price=limit_price,
+    #                    leverage=leverage,
+    #                    order_type=order_type)
 
 
 # if you don't wanna use a config, you can set options here:

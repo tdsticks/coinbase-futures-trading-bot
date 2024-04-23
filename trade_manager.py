@@ -706,12 +706,99 @@ class TradeManager:
         else:
             print(f"    No open positions: {future_position}")
 
+    def check_trading_conditions(self):
+        print(":check_trading_conditions:")
+
+        #######################
+        # Do we have an existing trades?
+        #######################
+
+        # Get Current Positions
+        future_positions = self.cb_adv_api.list_future_positions()
+        # pp(future_positions)
+
+        if future_positions['positions']:
+            # Store the active future position
+            self.cb_adv_api.store_future_positions(future_positions)
+
+            # TODO: Manage the trade(s) here
+
+        else:
+            #######################
+            # If not, then is it a good time to place a market order?
+            #######################
+
+            weekly_signals = self.get_latest_weekly_signal()
+            daily_signals = self.get_latest_daily_signal()
+
+            # FOR TESTING
+            weekly_signals.signal = daily_signals.signal = "long"
+
+            if weekly_signals.signal == daily_signals.signal:
+                print("\n>>> Weekly and Daily signals align, see if we should place a trade")
+
+                # Convert weekly and daily signals to a datetime object
+                weekly_signals_dt = datetime.datetime.strptime(weekly_signals.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+                daily_signals_dt = datetime.datetime.strptime(daily_signals.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+                daily_signals_dt = daily_signals_dt.replace(tzinfo=pytz.utc)  # Make it timezone-aware
+
+                # Current time in UTC
+                now = datetime.datetime.now(pytz.utc)
+
+                # Calculate time difference
+                time_diff = now - daily_signals_dt
+
+                # Get the number of days directly
+                days = time_diff.days
+
+                # FOR TESTING
+                days = 1
+
+                # Calculate hours, minutes, seconds from the total seconds
+                total_seconds = time_diff.total_seconds()
+                # Total seconds divided by number of seconds in an hour
+                hours = int(total_seconds // 3600)
+                # Remainder from hours divided by number of seconds in a minute
+                minutes = int((total_seconds % 3600) // 60)
+                # Remainder from minutes
+                seconds = int(total_seconds % 60)
+
+                if days <= 1:
+                    print(">>> We should place a trade!")
+
+                    # Show the Weekly and Daily Signal information
+                    weekly_ts_formatted = weekly_signals_dt.strftime("%B %d, %Y, %I:%M %p")
+                    daily_ts_formatted = daily_signals_dt.strftime("%B %d, %Y, %I:%M %p")
+                    print(f" Weekly: Signal:{weekly_signals.signal} | Date:{weekly_ts_formatted} | Price:${weekly_signals.price}")
+                    print(f" Daily: Signal:{daily_signals.signal} | Date:{daily_ts_formatted} | Price:${daily_signals.price}")
+
+                    #######################
+                    # Now lets check the Futures market
+                    #######################
+
+                    # Get Current Bid Ask Prices
+                    current_future_product = self.cb_adv_api.get_this_months_future()
+                    print(" current_future_product:", current_future_product.product_id)
+
+                    future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(current_future_product.product_id)
+                    future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+                    future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+                    print(f" {current_future_product.product_id}: bid: {future_bid_price} ask: {future_ask_price}")
+
+
+                else:
+                    print("Too far of gab between the last daily and today")
+                    print(f"Time difference: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
+            else:
+                print("Weekly Signal and Daily Signal DO NOT align, let's wait...")
+                print(" weekly_signals:", weekly_signals.signal)
+                print(" daily_signals:", daily_signals.signal)
+
 
 if __name__ == "__main__":
     print(__name__)
 
-    # TODO: Need to switch to RESTClient calls
-    # TODO: Need to track orders OPEN and FILLED (keep updated_
+    # TODO: Need to track orders OPEN and FILLED (keep updated)
     # TODO: Do we need the websocket to watch prices?
 
     ############################

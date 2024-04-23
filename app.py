@@ -158,7 +158,6 @@ def webhook():
 # print(check_contract_expiration)
 #######################
 
-
 #######################
 # List Orders
 # future_product = cbapi.get_this_months_future()
@@ -202,7 +201,6 @@ def webhook():
 #######################
 
 
-
 #######################
 # AP Scheduler
 #######################
@@ -216,42 +214,32 @@ def webhook():
 scheduler = APScheduler()
 
 
-@scheduler.task('interval', id='do_job_1', seconds=60, misfire_grace_time=900)
-def check_latest_signals_job():
-    print('\n:check_latest_signals_job:')
-    weekly_signals = tm.get_latest_weekly_signal()
-    daily_signals = tm.get_latest_daily_signal()
-    # print("weekly_signals:", weekly_signals)
-    print(" weekly_signals:", weekly_signals.time_unit)
-    print(" weekly_signals:", weekly_signals.timestamp)
-    print(" weekly_signals:", weekly_signals.price)
-    print(" weekly_signals:", weekly_signals.signal)
-    # print("daily_signals:", daily_signals)
-    print(" daily_signals:", daily_signals.time_unit)
-    print(" daily_signals:", daily_signals.timestamp)
-    print(" daily_signals:", daily_signals.price)
-    print(" daily_signals:", daily_signals.signal)
+@scheduler.task('interval', id='do_job_1', seconds=5, misfire_grace_time=900)
+def check_trading_conditions_job():
+    print('\n:check_trading_conditions_job:')
+
+    tm.check_trading_conditions()
 
 
-@scheduler.task('interval', id='do_job_2', seconds=30, misfire_grace_time=900)
-def check_profit_or_loss_job():
-    print('\n:check_profit_or_loss_job:')
-    # Get Current Positions
-    tm.tracking_current_position_profit_loss()
+# @scheduler.task('interval', id='do_job_2', seconds=30, misfire_grace_time=900)
+# def check_profit_or_loss_job():
+#     print('\n:check_profit_or_loss_job:')
+#     # Get Current Positions
+#     tm.tracking_current_position_profit_loss()
 
 
-@scheduler.task('interval', id='do_job_3', seconds=30, misfire_grace_time=900)
-def list_future_positions_job():
-    print('\n:list_future_positions_job:')
-    # Get Current Positions
-    future_positions = cbapi.list_future_positions()
-    # pp(future_positions)
-
-    cbapi.store_future_positions(future_positions)
+# @scheduler.task('interval', id='do_job_3', seconds=30, misfire_grace_time=900)
+# def list_future_positions_job():
+#     print('\n:list_future_positions_job:')
+#     # Get Current Positions
+#     future_positions = cbapi.list_future_positions()
+#     # pp(future_positions)
+#
+#     cbapi.store_future_positions(future_positions)
 
 
 @scheduler.task('interval', id='do_job_4', seconds=60, misfire_grace_time=900)
-def list_future_positions_job():
+def get_balance_summary_job():
     print('\n:get_balance_summary_job:')
     # Balance Summary get and store
     futures_balance = cbapi.get_balance_summary()

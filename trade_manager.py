@@ -47,11 +47,10 @@ class LogOrConsole:
         """
         self.flask_app = flask_app
 
-    def log_or_console(self, log=True, console=False, level="I", subject=None, msg1=None, msg2=None):
+    def log_or_console(self, log=True, level="I", subject=None, msg1=None, msg2=None):
         """
         Function to send messages to logging or console or both
         :param log: Send the messages to logging, enabled by default
-        :param console: Send the messages to print (console), Off by default
         :param level: Set the logger level (D=DEBUG, I=INFO, W=WARNING, E=ERROR, C=CRITICAL)
         :param subject: Allows for a subject in the message
         :param msg1: First message
@@ -81,8 +80,6 @@ class LogOrConsole:
         if subject:
             entire_message = f"{subject}: {entire_message}"
 
-        # print("DEBUG:", self.flask_app.config['DEBUG'])
-
         if log:
             if level == "D" and self.flask_app.config['DEBUG'] == 1:
                 self.flask_app.logger.debug(entire_message)
@@ -94,8 +91,6 @@ class LogOrConsole:
                 self.flask_app.logger.error(entire_message)
             if level == "C":
                 self.flask_app.logger.critical(entire_message)
-        if console:
-            print(entire_message)
 
 
 class CoinbaseAdvAPI:
@@ -105,7 +100,7 @@ class CoinbaseAdvAPI:
         self.flask_app = flask_app
         self.loc = LogOrConsole(flask_app)  # Send to Log or Console or both
         self.client = RESTClient(api_key=API_KEY, api_secret=API_SECRET)
-        self.loc.log_or_console(True, True, "D", None, ":Initializing CoinbaseAdvAPI:")
+        self.loc.log_or_console(True, "D", None, ":Initializing CoinbaseAdvAPI:")
         # self.client.get_fills()
 
     @staticmethod
@@ -117,7 +112,7 @@ class CoinbaseAdvAPI:
 
     def get_portfolios(self):
         # print(":get_portfolio_breakdown:")
-        self.loc.log_or_console(True, True, "I", None, ":get_portfolio_breakdown:")
+        self.loc.log_or_console(True, "I", None, ":get_portfolio_breakdown:")
 
         get_portfolios = self.client.get_portfolios()
         # print("get_portfolios", get_portfolios)
@@ -129,91 +124,13 @@ class CoinbaseAdvAPI:
 
     def get_portfolio_breakdown(self, portfolio_uuid):
         # print(":get_portfolio_breakdown:")
-        self.loc.log_or_console(True, True, "I", None, ":get_portfolio_breakdown:")
+        self.loc.log_or_console(True, "I", None, ":get_portfolio_breakdown:")
 
         get_portfolio_breakdown = self.client.get_portfolio_breakdown(portfolio_uuid=portfolio_uuid)
         # print("get_portfolio_breakdown", get_portfolio_breakdown)
-        self.loc.log_or_console(True, True, "I", "get_portfolio_breakdown", get_portfolio_breakdown)
+        self.loc.log_or_console(True, "I", "get_portfolio_breakdown", get_portfolio_breakdown)
 
         return
-
-    def get_product(self, product_id="BTC-USDT"):
-        print(":get_product:")
-
-        get_product = self.client.get_product(product_id=product_id)
-        print("get_product:", get_product)
-
-        return get_product
-
-    def list_products(self, product_type="FUTURE"):
-        # print(":list_products:")
-
-        get_products = self.client.get_products(product_type=product_type)
-        # print("get_products:", get_products)
-
-        return get_products
-
-    def store_btc_futures_products(self, future_products):
-        print(":store_btc_futures_products:")
-        # print("future_products:", future_products, type(future_products))
-
-        for future in future_products['products']:
-            # print("future product:", future)
-            if 'BTC' in future['future_product_details']['contract_root_unit']:
-                # print("future product:", future)
-
-                with self.flask_app.app_context():  # Push an application context
-                    try:
-                        # Convert necessary fields
-                        product_id = future['product_id']
-                        price = float(future['price']) if future['price'] else None
-                        price_change_24h = float(future['price_percentage_change_24h']) if future[
-                            'price_percentage_change_24h'] else None
-                        volume_24h = float(future['volume_24h']) if future['volume_24h'] else None
-                        volume_change_24h = float(future['volume_percentage_change_24h']) if future[
-                            'volume_percentage_change_24h'] else None
-                        contract_expiry = datetime.strptime(
-                            future['future_product_details']['contract_expiry'], "%Y-%m-%dT%H:%M:%SZ")
-                        contract_size = float(future['future_product_details']['contract_size'])
-
-                        # Check if the future product already exists in the database
-                        future_entry = CoinbaseFuture.query.filter_by(product_id=product_id).first()
-                        # print("\nfound future_entry:", future_entry)
-
-                        # If it doesn't exist, create the new record using just product_id
-                        if not future_entry:
-                            # print("\nno future entry found, adding it")
-                            future_entry = CoinbaseFuture(product_id=future['product_id'])
-                            db.session.add(future_entry)
-
-                        # Set or update all fields
-                        future_entry.price = price
-                        future_entry.price_change_24h = price_change_24h
-                        future_entry.volume_24h = volume_24h
-                        future_entry.volume_change_24h = volume_change_24h
-                        future_entry.display_name = future['display_name']
-                        future_entry.product_type = future['product_type']
-                        future_entry.contract_expiry = contract_expiry
-                        future_entry.contract_size = contract_size
-                        future_entry.contract_root_unit = future['future_product_details']['contract_root_unit']
-                        future_entry.venue = future['future_product_details']['venue']
-                        future_entry.status = future['status']
-                        future_entry.trading_disabled = future['trading_disabled']
-
-                        db.session.commit()
-                    except Exception as e:
-                        print(f"Failed to add future product {future['product_id']}: {e}")
-                        db.session.rollback()
-
-    def get_current_future_product_from_db(self, product_id):
-        print(":get_current_future_product_from_db:")
-
-        with self.flask_app.app_context():
-            # Check if the future product already exists in the database
-            future_product = CoinbaseFuture.query.filter_by(product_id=product_id).first()
-            # print("\nfound future_product:", future_product)
-
-        return future_product
 
     def get_balance_summary(self):
         # print(":get_balance_summary:")
@@ -245,6 +162,8 @@ class CoinbaseAdvAPI:
 
     def store_futures_balance_summary(self, data):
         # print(':store_futures_balance_summary:')
+        self.loc.log_or_console(True, "D", None,
+                                ":store_futures_balance_summary:")
 
         balance_summary_data = data['balance_summary']
         # pp(balance_summary_data)
@@ -304,9 +223,89 @@ class CoinbaseAdvAPI:
                 db.session.commit()
                 # print("Balance summary updated or created successfully.")
             except Exception as e:
-                print(f"Failed to add/update balance summary {balance_summary_data}: {e}")
+                # print(f"Failed to add/update balance summary {balance_summary_data}: {e}")
+                self.loc.log_or_console(True, "E",
+                                        "Failed to add/update balance summary",
+                                        balance_summary_data, e)
                 db.session.rollback()
         # print("Balance summary stored")
+
+    def get_product(self, product_id="BTC-USDT"):
+        # print(":get_product:")
+        # self.loc.log_or_console(True, "D", None, ":get_product:")
+
+        get_product = self.client.get_product(product_id=product_id)
+        # print("get_product:", get_product)
+        # self.loc.log_or_console(True, "I", "get_product", get_product)
+
+        return get_product
+
+    def list_products(self, product_type="FUTURE"):
+        # print(":list_products:")
+        # self.loc.log_or_console(True, "D", None, ":list_products:")
+
+        get_products = self.client.get_products(product_type=product_type)
+        # print("get_products:", get_products)
+        # self.loc.log_or_console(True, "I", "get_products", get_products)
+
+        return get_products
+
+    def store_btc_futures_products(self, future_products):
+        # print(":store_btc_futures_products:")
+        self.loc.log_or_console(True, "D", None, ":store_btc_futures_products:")
+        # print("future_products:", future_products, type(future_products))
+
+        for future in future_products['products']:
+            # print("future product:", future)
+            if 'BTC' in future['future_product_details']['contract_root_unit']:
+                # print("future product:", future)
+
+                with self.flask_app.app_context():  # Push an application context
+                    try:
+                        # Convert necessary fields
+                        product_id = future['product_id']
+                        price = float(future['price']) if future['price'] else None
+                        price_change_24h = float(future['price_percentage_change_24h']) if future[
+                            'price_percentage_change_24h'] else None
+                        volume_24h = float(future['volume_24h']) if future['volume_24h'] else None
+                        volume_change_24h = float(future['volume_percentage_change_24h']) if future[
+                            'volume_percentage_change_24h'] else None
+                        contract_expiry = datetime.strptime(
+                            future['future_product_details']['contract_expiry'], "%Y-%m-%dT%H:%M:%SZ")
+                        contract_size = float(future['future_product_details']['contract_size'])
+
+                        # Check if the future product already exists in the database
+                        future_entry = CoinbaseFuture.query.filter_by(product_id=product_id).first()
+                        # print("\nfound future_entry:", future_entry)
+
+                        # If it doesn't exist, create the new record using just product_id
+                        if not future_entry:
+                            # print("\nno future entry found, adding it")
+                            future_entry = CoinbaseFuture(product_id=future['product_id'])
+                            db.session.add(future_entry)
+
+                        # Set or update all fields
+                        future_entry.price = price
+                        future_entry.price_change_24h = price_change_24h
+                        future_entry.volume_24h = volume_24h
+                        future_entry.volume_change_24h = volume_change_24h
+                        future_entry.display_name = future['display_name']
+                        future_entry.product_type = future['product_type']
+                        future_entry.contract_expiry = contract_expiry
+                        future_entry.contract_size = contract_size
+                        future_entry.contract_root_unit = future['future_product_details']['contract_root_unit']
+                        future_entry.venue = future['future_product_details']['venue']
+                        future_entry.status = future['status']
+                        future_entry.trading_disabled = future['trading_disabled']
+
+                        db.session.commit()
+                    except Exception as e:
+                        # print(f"Failed to add future product {future['product_id']}: {e}")
+                        self.loc.log_or_console(True, "E",
+                                                "Failed to add future product",
+                                                future['product_id'],
+                                                e)
+                        db.session.rollback()
 
     @staticmethod
     def get_current_short_month_uppercase():
@@ -319,13 +318,17 @@ class CoinbaseAdvAPI:
         return short_month
 
     def get_this_months_future(self):
-        print(":get_this_months_future:")
+        # print(":get_this_months_future:")
+        self.loc.log_or_console(True, "D", None,
+                                ":get_this_months_future:")
 
         # Find this months future product
         with self.flask_app.app_context():
             # Get the current month's short name in uppercase
             short_month = self.get_current_short_month_uppercase()
-            print(f"Searching for futures contracts for the month: {short_month}")
+            # print(f"Searching for futures contracts for the month: {short_month}")
+            self.loc.log_or_console(True, "I",
+                                    "Searching for futures contracts for the month", short_month)
 
             # Search the database for a matching futures contract
             future_entry = CoinbaseFuture.query.filter(
@@ -333,14 +336,34 @@ class CoinbaseAdvAPI:
             ).first()
 
             if future_entry:
-                print("\nFound future entry:", future_entry)
+                # print("\nFound future entry:", future_entry)
+                self.loc.log_or_console(True, "I",
+                                        "Found future entry", future_entry)
                 return future_entry
             else:
-                print("\n   No future entry found for this month.")
+                # print("\n   No future entry found for this month.")
+                self.loc.log_or_console(True, "W",
+                                        None, "No future entry found for this month.")
                 return None
+
+    def get_current_future_product_from_db(self, product_id):
+        # print(":get_current_future_product_from_db:")
+        self.loc.log_or_console(True, "I", None, ":get_current_future_product_from_db:")
+
+        # TODO: May need to add a Month parameter and filter on that to get
+        #   next months product close to expiration
+
+        with self.flask_app.app_context():
+            # Check if the future product already exists in the database
+            future_product = CoinbaseFuture.query.filter_by(product_id=product_id).first()
+            # print("\nfound future_product:", future_product)
+
+        return future_product
 
     def list_future_positions(self):
         # print(":list_future_positions:")
+        # self.loc.log_or_console(True, "D", None,
+        #                         ":list_future_positions:")
 
         list_futures_positions = self.client.list_futures_positions()
         # pp(list_futures_positions)
@@ -814,7 +837,7 @@ class TradeManager:
         self.loc = LogOrConsole(flask_app)  # Send to Log or Console or both
         self.cb_adv_api = CoinbaseAdvAPI(flask_app)
 
-        self.loc.log_or_console(True, True, "D", None, ":Initializing TradeManager:")
+        self.loc.log_or_console(True, "D", None, ":Initializing TradeManager:")
 
     # def handle_aurox_signal(self, signal, product_id):
     #     print(":handle_aurox_signal:")
@@ -834,7 +857,7 @@ class TradeManager:
 
     def write_db_signal(self, data):
         # print(":write_db_signal:")
-        self.loc.log_or_console(True, True, "I", None, ":write_db_signal:")
+        self.loc.log_or_console(True, "I", None, ":write_db_signal:")
 
         # TODO: May need to convert these timestamps from Aurox as they're in ISO format
 
@@ -860,7 +883,7 @@ class TradeManager:
                 db.session.flush()  # Flush to assign an ID to new_signal without committing transaction
 
                 # print("New signal stored:", new_signal)
-                self.loc.log_or_console(True, True, "I", "New signal stored", new_signal)
+                self.loc.log_or_console(True, "I", "New signal stored", new_signal)
 
                 #
                 # Now, get the bid and ask prices for the current futures product
@@ -887,18 +910,19 @@ class TradeManager:
                     )
                     db.session.add(new_future_price)
                     # print("Associated bid/ask prices stored for the signal")
-                    self.loc.log_or_console(True, True, "I", None, "Associated bid/ask prices stored for the signal")
+                    self.loc.log_or_console(True, "I", None, "Associated bid/ask prices stored for the signal")
 
                 db.session.commit()
 
             except db_errors as e:
                 # print(f"Error fetching latest daily signal: {str(e)}")
-                self.loc.log_or_console(True, True, "E", "Error fetching latest daily signal", str(e))
+                self.loc.log_or_console(True, "E", "Error fetching latest daily signal", str(e))
                 return None
 
     def get_latest_weekly_signal(self):
         # print(":get_latest_weekly_signal:")
-        self.loc.log_or_console(True, True, "D", None, ":get_latest_weekly_signal:")
+        # self.loc.log_or_console(True, "D", None,
+        #                         ":get_latest_weekly_signal:")
         with self.flask_app.app_context():
             # Query the latest weekly signal including related future price data
             latest_signal = AuroxSignal.query \
@@ -910,7 +934,8 @@ class TradeManager:
 
     def get_latest_daily_signal(self):
         # print(":get_latest_daily_signal:")
-        self.loc.log_or_console(True, True, "D", None, ":get_latest_daily_signal:")
+        # self.loc.log_or_console(True, "D", None,
+        #                         ":get_latest_daily_signal:")
         with self.flask_app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
@@ -921,7 +946,7 @@ class TradeManager:
 
     def compare_last_daily_to_todays_date(self):
         # print(":compare_last_daily_to_todays_date:")
-        self.loc.log_or_console(True, True, "I", None, ":compare_last_daily_to_todays_date:")
+        self.loc.log_or_console(True, "I", None, ":compare_last_daily_to_todays_date:")
         latest_signal = self.get_latest_daily_signal()
         if latest_signal:
             # Strip the 'Z' and parse the datetime
@@ -938,19 +963,20 @@ class TradeManager:
             # Check if the difference is less than or equal to 24 hours
             if time_diff <= datetime.timedelta(days=1):
                 # print("Within 24 hours, proceed to place trade.")
-                self.loc.log_or_console(True, True, "I", None, "Within 24 hours, proceed to place trade.")
+                self.loc.log_or_console(True, "I", None, "Within 24 hours, proceed to place trade.")
                 return True
             else:
                 # print("More than 24 hours since the last signal, wait for the next one.")
-                self.loc.log_or_console(True, True, "W", None, "More than 24 hours since the last signal, wait for the next one.")
+                self.loc.log_or_console(True, "W", None,
+                                        "More than 24 hours since the last signal, wait for the next one.")
         else:
             # print("No daily signal found.")
-            self.loc.log_or_console(True, True, "W", None,
+            self.loc.log_or_console(True, "W", None,
                                     "No daily signal found.")
 
     def check_for_contract_expires(self):
         # print(":check_for_contract_expires:")
-        self.loc.log_or_console(True, True, "D", None,
+        self.loc.log_or_console(True, "D", None,
                                 ":check_for_contract_expires:")
 
         # NOTE: Futures markets are open for trading from Sunday 6 PM to
@@ -958,8 +984,11 @@ class TradeManager:
         #  with a 1-hour break each day from 5 PM – 6 PM ET
 
         list_future_products = self.cb_adv_api.list_products("FUTURE")
+
         current_month = self.cb_adv_api.get_current_short_month_uppercase()
+
         self.cb_adv_api.store_btc_futures_products(list_future_products)
+
         current_future_product = self.cb_adv_api.get_this_months_future()
         # print(" current_future_product:", current_future_product.product_id)
 
@@ -976,42 +1005,46 @@ class TradeManager:
             time_diff = contract_expiry - now
             # print("total_seconds:", time_diff.total_seconds())
 
+            days = time_diff.days
+            hours, remainder = divmod(time_diff.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+
             # Check if the contract has expired
             if time_diff.total_seconds() <= 0:
-                # print("\n-----------------------------------")
-                # print("Contract has expired, close trades.")
-                # Here you would add code to handle closing trades
-                # print(">>> Close out any positions!!!")
-                # print("-----------------------------------")
-                self.loc.log_or_console(True, True, "W", None, "-----------------------------------")
-                self.loc.log_or_console(True, True, "W", None, "Contract has expired, close trades.")
-                # Here you would add code to handle closing trades
-                self.loc.log_or_console(True, True, "W", None, ">>> Close out any positions!!!")
-                self.loc.log_or_console(True, True, "W", None, "-----------------------------------")
-            else:
-                days = time_diff.days
-                hours, remainder = divmod(time_diff.seconds, 3600)
-                minutes, seconds = divmod(remainder, 60)
-                # print("\n-----------------------------------")
-                # print(f"Contract for:"
-                #       f"  {current_future_product.product_id}\n"
-                #       f"  Month: {current_month} \n"
-                #       f"  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds.")
-                # print("-----------------------------------")
-                contract_msg = ("\n-----------------------------------"
-                                f"Contract for:"
-                                f"  {current_future_product.product_id}\n"
-                                f"  Month: {current_month} \n"
-                                f"  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds."
-                                "-----------------------------------")
-                self.loc.log_or_console(True, True, "I", None, contract_msg)
+                self.loc.log_or_console(True, "W", None, "-----------------------------------")
+                self.loc.log_or_console(True, "W", None, "Contract has expired, close trades.")
+                self.loc.log_or_console(True, "W", None, ">>> Close out any positions!!!")
+                self.loc.log_or_console(True, "W", None, "-----------------------------------")
+            elif days <= 1:
 
+                # TODO: Need to switch to next months contract if this close
+
+                self.loc.log_or_console(True, "W", None, "-----------------------------------")
+                self.loc.log_or_console(True, "W", None, "Contract is close to expiring!")
+                self.loc.log_or_console(True, "W", None, "Switch to next months contract")
+                self.loc.log_or_console(True, "W", None, ">>> Close out any positions!!!")
+                self.loc.log_or_console(True, "W", None, "-----------------------------------")
+                contract_msg = ("\n-------------------------"
+                                f"\nContract for:"
+                                f"\n  {current_future_product.product_id}"
+                                f"\n  Month: {current_month}"
+                                f"\n  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds."
+                                "\n-------------------------")
+                self.loc.log_or_console(True, "W", None, contract_msg)
+            else:
+                contract_msg = ("\n-------------------------"
+                                f"\nContract for:"
+                                f"\n  {current_future_product.product_id}"
+                                f"\n  Month: {current_month}"
+                                f"\n  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds."
+                                "\n-------------------------")
+                self.loc.log_or_console(True, "I", None, contract_msg)
         else:
             print(" No future product found for this month.")
 
     def ladder_orders(self, side, product_id, bid_price, ask_price):
         # print(":ladder_orders:")
-        self.loc.log_or_console(True, True, "D", None,":ladder_orders:")
+        self.loc.log_or_console(True, "D", None, ":ladder_orders:")
 
         # NOTE: This is part of our strategy in placing DCA limit orders if the trade goes against us,
         #   even though both the Weekly and Daily signals are in our favor. This not only helps
@@ -1027,7 +1060,7 @@ class TradeManager:
         elif side == "SELL":  # SELL / SHORT
             cur_future_price = ask_price
         # print("cur_future_price:", cur_future_price)
-        self.loc.log_or_console(True, True, "I", "cur_future_price", cur_future_price)
+        self.loc.log_or_console(True, "I", "cur_future_price", cur_future_price)
 
         #
         # Calculate the three DCA orders (Long or Short)
@@ -1095,7 +1128,7 @@ class TradeManager:
 
     def is_trading_time(self, current_time):
         # print("---> Checking for open market...")
-        self.loc.log_or_console(True, True, "I", None,"---> Checking for open market...")
+        self.loc.log_or_console(True, "I", None, "---> Checking for open market...")
         """Check if the current time is within trading hours.
             Trading hours are Sunday 6 PM to Friday 5 PM ET, with a break from 5 PM to 6 PM daily.
         """
@@ -1127,24 +1160,26 @@ class TradeManager:
 
         # Determine if it's a valid trading time
         if is_during_week and (is_before_break or is_after_break):
-            print(" >>> Futures market is OPEN! <<<")
-            self.loc.log_or_console(True, True, "I", None, " >>> Futures market is OPEN! <<<")
+            # print(" >>> Futures market is OPEN! <<<")
+            self.loc.log_or_console(True, "I", None, " >>> Futures market is OPEN! <<<")
             return True
         elif is_sunday_after_6pm or is_friday_before_5pm:
-            print(" >>> Futures market is OPEN! <<<")
-            self.loc.log_or_console(True, True, "I", None, " >>> Futures market is OPEN! <<<")
+            # print(" >>> Futures market is OPEN! <<<")
+            self.loc.log_or_console(True, "I", None, " >>> Futures market is OPEN! <<<")
             return True
-        print(" >>> Futures market is CLOSED. <<<")
-        self.loc.log_or_console(True, True, "W", None, " >>> Futures market is CLOSED. <<<")
+        # print(" >>> Futures market is CLOSED. <<<")
+        self.loc.log_or_console(True, "W", None, " >>> Futures market is CLOSED. <<<")
         return False
 
     def check_trading_conditions(self):
         # print(":check_trading_conditions:")
-        self.loc.log_or_console(True, True, "D", None, ":check_trading_conditions:")
+        self.loc.log_or_console(True, "D", None, ":check_trading_conditions:")
 
         #######################
         # Do we have an existing trades?
         #######################
+
+        self.check_for_contract_expires()
 
         # Get Current Positions from API
         future_positions = self.cb_adv_api.list_future_positions()
@@ -1152,7 +1187,7 @@ class TradeManager:
 
         if future_positions['positions']:
             # print(" >>> We have an active position(s)")
-            self.loc.log_or_console(True, True, "I", None, " >>> We have an active position(s)")
+            self.loc.log_or_console(True, "I", None, " >>> We have an active position(s)")
 
             # Clear and store the active future position
             self.cb_adv_api.store_future_positions(future_positions)
@@ -1167,7 +1202,7 @@ class TradeManager:
                         self.track_take_profit_order(position)
                 except Exception as e:
                     # print(f"Unexpected error: {e}")
-                    self.loc.log_or_console(True, True, "E", "Unexpected error:", msg1=e)
+                    self.loc.log_or_console(True, "E", "Unexpected error:", msg1=e)
 
         else:
             #######################
@@ -1196,7 +1231,7 @@ class TradeManager:
 
             if weekly_signals.signal == daily_signals.signal:
                 # print("\n>>> Weekly and Daily signals align, see if we should place a trade")
-                self.loc.log_or_console(True, True, "I", None,
+                self.loc.log_or_console(True, "I", None,
                                         " >>> Weekly and Daily signals align, see if we should place a trade")
 
                 now = datetime.now(pytz.utc)  # Current time in UTC
@@ -1214,7 +1249,7 @@ class TradeManager:
 
                 if days <= 1:
                     # print(">>> We should place a trade!")
-                    self.loc.log_or_console(True, True, "I", None, ">>> We should place a trade!")
+                    self.loc.log_or_console(True, "I", None, ">>> We should place a trade!")
 
                     for future_price in weekly_signals.future_prices:
                         weekly_signal_spot_price = future_price.signal_spot_price
@@ -1235,13 +1270,13 @@ class TradeManager:
                                   f"Date: {weekly_ts_formatted} | "
                                   f"Spot Price: ${weekly_signal_spot_price} | "
                                   f"Future Price: ${weekly_future_avg_price}")
-                    self.loc.log_or_console(True, True, "I", "WEEKLY", weekly_msg)
+                    self.loc.log_or_console(True, "I", "WEEKLY", weekly_msg)
 
                     daily_msg = (f"Signal: {daily_signals.signal} | "
                                  f"Date: {daily_ts_formatted} | "
                                  f"Spot Price: ${daily_signal_spot_price} | "
                                  f"Future Price: ${daily_future_avg_price}")
-                    self.loc.log_or_console(True, True, "I", "DAILY", daily_msg)
+                    self.loc.log_or_console(True, "I", "DAILY", daily_msg)
 
                     #######################
                     # Now lets check the Futures market (we should store in logging)
@@ -1250,7 +1285,7 @@ class TradeManager:
                     # Get this months current product
                     current_future_product = self.cb_adv_api.get_this_months_future()
                     # print(" current_future_product:", current_future_product.product_id)
-                    self.loc.log_or_console(True, True, "I", "current_future_product", current_future_product.product_id)
+                    self.loc.log_or_console(True, "I", "current_future_product", current_future_product.product_id)
 
                     product_id = current_future_product.product_id
 
@@ -1263,9 +1298,9 @@ class TradeManager:
                     #       f"Current Futures: bid: ${cur_future_bid_price} "
                     #       f"ask: ${cur_future_ask_price}")
                     cur_prices_msg = (f" Prd: {product_id} - "
-                          f"Current Futures: bid: ${cur_future_bid_price} "
-                          f"ask: ${cur_future_ask_price}")
-                    self.loc.log_or_console(True, True, "I", None, cur_prices_msg)
+                                      f"Current Futures: bid: ${cur_future_bid_price} "
+                                      f"ask: ${cur_future_ask_price}")
+                    self.loc.log_or_console(True, "I", None, cur_prices_msg)
 
                     # LONG = BUY
                     # SHORT = SELL
@@ -1298,25 +1333,25 @@ class TradeManager:
                 else:
                     # print("Too far of gab between the last daily and today")
                     # print(f"Time difference: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
-                    self.loc.log_or_console(True, True, "W", None,
+                    self.loc.log_or_console(True, "W", None,
                                             "Too far of gab between the last daily and today")
                     time_diff_msg = f"{days} days, {hours} hours, {minutes} minutes, {seconds} seconds"
-                    self.loc.log_or_console(True, True, "W", "Time difference", time_diff_msg)
+                    self.loc.log_or_console(True, "W", "Time difference", time_diff_msg)
             else:
                 # print("Weekly Signal and Daily Signal DO NOT align, let's wait...")
                 # print(f"    Weekly | Signal: {weekly_signals.signal} | Date: {weekly_ts_formatted}")
                 # print(f"    Daily | Signal: {daily_signals.signal} | Date: {daily_ts_formatted}")
-                self.loc.log_or_console(True, True, "W", None,
+                self.loc.log_or_console(True, "W", None,
                                         "Weekly Signal and Daily Signal DO NOT align, let's wait...")
 
                 weekly_msg = f"Weekly Signal: {weekly_signals.signal} | Date: {weekly_ts_formatted}"
                 daily_msg = f"Daily Signal: {daily_signals.signal} | Date: {daily_ts_formatted}"
-                self.loc.log_or_console(True, True, "W", None, weekly_msg)
-                self.loc.log_or_console(True, True, "W", None, daily_msg)
+                self.loc.log_or_console(True, "W", None, weekly_msg)
+                self.loc.log_or_console(True, "W", None, daily_msg)
 
     def tracking_current_position_profit_loss(self, position):
         # print(":tracking_current_position_profit_loss:")
-        self.loc.log_or_console(True, True, "D", None, ":tracking_current_position_profit_loss:")
+        self.loc.log_or_console(True, "D", None, ":tracking_current_position_profit_loss:")
 
         # TODO: Need to get Client Order IDs for all open contracts in order to close them directly
 
@@ -1337,25 +1372,25 @@ class TradeManager:
             current_price = round(position.current_price, 2)
             # print("     avg_entry_price:", avg_entry_price)
             # print("     current_price:", current_price)
-            self.loc.log_or_console(True, True, "I", "  avg_entry_price:", avg_entry_price)
-            self.loc.log_or_console(True, True, "I", "  current_price:", current_price)
+            self.loc.log_or_console(True, "I", "  avg_entry_price:", avg_entry_price)
+            self.loc.log_or_console(True, "I", "  current_price:", current_price)
 
             number_of_contracts = position.number_of_contracts
             # print("     number_of_contracts:", number_of_contracts)
-            self.loc.log_or_console(True, True, "I", "  number_of_contracts:", number_of_contracts)
+            self.loc.log_or_console(True, "I", "  number_of_contracts:", number_of_contracts)
 
             # Calculate total cost and current value per contract
             total_initial_cost = round(avg_entry_price * number_of_contracts * product_contract_size, 3)
             total_current_value = round(current_price * number_of_contracts * product_contract_size, 3)
             # print("     total_initial_cost:", total_initial_cost)
             # print("     total_current_value:", total_current_value)
-            self.loc.log_or_console(True, True, "I", "  total_initial_cost:", total_initial_cost)
-            self.loc.log_or_console(True, True, "I", "  total_current_value:", total_current_value)
+            self.loc.log_or_console(True, "I", "  total_initial_cost:", total_initial_cost)
+            self.loc.log_or_console(True, "I", "  total_current_value:", total_current_value)
 
             # Calculate profit or loss for all contracts
             calc_profit_or_loss = round(total_initial_cost - total_current_value)
             # print(f"    calc_profit_or_loss: ${calc_profit_or_loss:.2f}")
-            self.loc.log_or_console(True, True, "I", "  calc_profit_or_loss:", calc_profit_or_loss)
+            self.loc.log_or_console(True, "I", "  calc_profit_or_loss:", calc_profit_or_loss)
 
             # Percentage change: (New Value - Original Value) / Original Value × 100
             if total_initial_cost != 0:  # Prevent division by zero
@@ -1364,48 +1399,48 @@ class TradeManager:
             else:
                 calc_percentage = 0
             # print(f"    calc_percentage: %{calc_percentage}")
-            self.loc.log_or_console(True, True, "I", "  calc_percentage:", calc_percentage)
+            self.loc.log_or_console(True, "I", "  calc_percentage:", calc_percentage)
 
             # print("Contract Expires on", future_position['position']['expiration_time'])
             # print(" Contract Expires on", position.expiration_time)
 
             # Check when the product contract expires and print it out
-            self.check_for_contract_expires()
+            # self.check_for_contract_expires()
 
             # print("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>")
             # print(">>> Profit / Loss <<<")
-            self.loc.log_or_console(True, True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
-            self.loc.log_or_console(True, True, "I", None, ">>> Profit / Loss <<<")
+            self.loc.log_or_console(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
+            self.loc.log_or_console(True, "I", None, ">>> Profit / Loss <<<")
             if calc_percentage >= 2:
                 # print(f"    Take profit at 2% or higher %{calc_percentage}")
                 # print(f"    Good Profit: ${calc_profit_or_loss:.2f}")
-                self.loc.log_or_console(True, True, "I", "Take profit at 2% or higher %", calc_percentage)
-                self.loc.log_or_console(True, True, "I", "Good Profit $", calc_profit_or_loss)
+                self.loc.log_or_console(True, "I", "Take profit at 2% or higher %", calc_percentage)
+                self.loc.log_or_console(True, "I", "Good Profit $", calc_profit_or_loss)
             elif 2 > calc_percentage > 0.5:
                 # print(f"    Not ready to take profit %{calc_percentage}")
                 # print(f"    Ok Profit: ${calc_profit_or_loss:.2f}")
-                self.loc.log_or_console(True, True, "I", "Not ready to take profit %", calc_percentage)
-                self.loc.log_or_console(True, True, "I", "Ok Profit $", calc_profit_or_loss)
+                self.loc.log_or_console(True, "I", "Not ready to take profit %", calc_percentage)
+                self.loc.log_or_console(True, "I", "Ok Profit $", calc_profit_or_loss)
             elif 0.5 >= calc_percentage >= 0:
                 # print(f"    Neutral  %{calc_percentage}")
                 # print(f"    Not enough profit: ${calc_profit_or_loss:.2f}")
-                self.loc.log_or_console(True, True, "I", "Neutral %", calc_percentage)
-                self.loc.log_or_console(True, True, "I", "Not enough profit $", calc_profit_or_loss)
+                self.loc.log_or_console(True, "I", "Neutral %", calc_percentage)
+                self.loc.log_or_console(True, "I", "Not enough profit $", calc_profit_or_loss)
             elif calc_percentage < 0:
                 # print(f"    Trade negative %{calc_percentage}")
                 # print(f"    No profit, loss of: ${calc_profit_or_loss:.2f}")
-                self.loc.log_or_console(True, True, "I", "Trade negative %", calc_percentage)
-                self.loc.log_or_console(True, True, "I", "No profit, loss of $", calc_profit_or_loss)
+                self.loc.log_or_console(True, "I", "Trade negative %", calc_percentage)
+                self.loc.log_or_console(True, "I", "No profit, loss of $", calc_profit_or_loss)
             # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>")
-            self.loc.log_or_console(True, True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
+            self.loc.log_or_console(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
         else:
             # print(f"    No open positions: {position}")
-            self.loc.log_or_console(True, True, "W", "No open positions", position)
+            self.loc.log_or_console(True, "W", "No open positions", position)
 
     def track_take_profit_order(self, position):
         # print("\n:track_take_profit_order:")
-        self.loc.log_or_console(True, True, "D", None, ":track_take_profit_order:")
+        self.loc.log_or_console(True, "D", None, ":track_take_profit_order:")
 
         # TODO: Figure out the take profit, especially if we have more orders added
         #   The average price may be key here, plus the percentage we want to profit from
@@ -1452,7 +1487,7 @@ class TradeManager:
 
         avg_entry_price = round(position.avg_entry_price)
         # print(" avg_entry_price:", avg_entry_price)
-        self.loc.log_or_console(True, True, "I", "avg_entry_price", avg_entry_price)
+        self.loc.log_or_console(True, "I", "avg_entry_price", avg_entry_price)
 
         current_price = position.current_price
         # print(" current_price:", current_price)
@@ -1476,14 +1511,14 @@ class TradeManager:
             take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
                 int(avg_entry_price) + take_profit_offset_price)
             # print(" SELL Short take_profit_price: $", take_profit_price)
-            self.loc.log_or_console(True, True, "I", "SELL Short take_profit_price: $", take_profit_price)
+            self.loc.log_or_console(True, "I", "SELL Short take_profit_price: $", take_profit_price)
 
         # If we're SHORT, then we need to place a profitable BUY order
         elif side == "SHORT":  # SELL / SHORT
             take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
                 int(avg_entry_price) - take_profit_offset_price)
             # print(" BUY Long take_profit_price: $", take_profit_price)
-            self.loc.log_or_console(True, True, "I", "BUY Long take_profit_price: $", take_profit_price)
+            self.loc.log_or_console(True, "I", "BUY Long take_profit_price: $", take_profit_price)
 
         # leverage = "3"
         order_type = "limit_limit_gtc"
@@ -1491,7 +1526,7 @@ class TradeManager:
         # If we don't have an existing take profit order, create one
         if not existing_take_profit_order:
             # print("\n >>> Create new take_profit_order")
-            self.loc.log_or_console(True, True, "I", None, ">>> Create new take_profit_order")
+            self.loc.log_or_console(True, "I", None, ">>> Create new take_profit_order")
 
             # Take Profit Order
             self.cb_adv_api.create_order(side=take_profit_side,
@@ -1503,31 +1538,31 @@ class TradeManager:
 
         else:  # Otherwise, let's edit and update the order based on the market and position(s)
             # print("\n >>> Edit Existing Take Profit Order")
-            self.loc.log_or_console(True, True, "I", None, ">>> Edit Existing Take Profit Order")
+            self.loc.log_or_console(True, "I", None, ">>> Edit Existing Take Profit Order")
 
             # pp(take_profit_order)
             order_id = take_profit_order['order_id']
             client_order_id = take_profit_order['client_order_id']
             # print(" order_id:", order_id)
             # print(" client_order_id:", client_order_id)
-            self.loc.log_or_console(True, True, "I", "order_id", order_id)
-            self.loc.log_or_console(True, True, "I", "client_order_id", client_order_id)
+            self.loc.log_or_console(True, "I", "order_id", order_id)
+            self.loc.log_or_console(True, "I", "client_order_id", client_order_id)
 
             # For limit GTC orders only
             size = take_profit_order['order_configuration']['limit_limit_gtc']['base_size']
             # print(" take_profit_order size:", size)
             # print(" number_of_contracts:", number_of_contracts)
             # print(" take_profit_price:", take_profit_price)
-            self.loc.log_or_console(True, True, "I", "take_profit_order size", size)
-            self.loc.log_or_console(True, True, "I", "number_of_contracts", number_of_contracts)
-            self.loc.log_or_console(True, True, "I", "take_profit_price", take_profit_price)
+            self.loc.log_or_console(True, "I", "take_profit_order size", size)
+            self.loc.log_or_console(True, "I", "number_of_contracts", number_of_contracts)
+            self.loc.log_or_console(True, "I", "take_profit_price", take_profit_price)
 
             # See if we need to update the size based on the existing number of
             # contracts in the position
             if int(number_of_contracts) > int(size):
                 new_size = number_of_contracts
                 print(" take_profit_order new_size:", new_size)
-                self.loc.log_or_console(True, True, "W", "take_profit_order new_size", new_size)
+                self.loc.log_or_console(True, "W", "take_profit_order new_size", new_size)
             else:
                 new_size = ""
 

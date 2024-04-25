@@ -63,6 +63,10 @@ def create_app():
     flask_app = Flask(__name__)
     flask_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///aurox_signals.db'
     flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    flask_app.config['DEBUG'] = os.getenv('DEBUG', 'False') == 'True'
+
+    # print("DEBUG:", os.getenv('DEBUG', 'False'))
+    print("DEBUG:", flask_app.config['DEBUG'])
 
     db.init_app(flask_app)
     migrate = Migrate(flask_app, db)
@@ -88,17 +92,25 @@ def create_app():
     handler.setFormatter(logging.Formatter(
         '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
     ))
-    # Set the logger level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    handler.setLevel(logging.DEBUG)
 
-    flask_app.logger.addHandler(handler)
-    flask_app.logger.setLevel(logging.DEBUG)
+    if flask_app.config['DEBUG']:
+        # Set the logger level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        handler.setLevel(logging.DEBUG)
+        flask_app.logger.addHandler(handler)
+        flask_app.logger.setLevel(logging.DEBUG)
+    else:
+        handler.setLevel(logging.WARNING)
+        flask_app.logger.addHandler(handler)
+        flask_app.logger.setLevel(logging.WARNING)
 
     # flask_app.logger.debug('----------------- restarting Flask app -----------------')
     flask_app.logger.info('----------------- restarting Flask app -----------------')
     # flask_app.logger.warning('----------------- restarting Flask app -----------------')
     # flask_app.logger.error('----------------- restarting Flask app -----------------')
     # flask_app.logger.critical('----------------- restarting Flask app -----------------')
+
+    if flask_app.config['DEBUG']:
+        flask_app.logger.info("Debugging is ON")
 
     return flask_app
 
@@ -108,20 +120,9 @@ app = create_app()
 # Add the ApScheduler Config
 app.config.from_object(Config())
 
-# print(os.getenv('DEBUG', 'False'))
-
-# Configure your application
-app.config['DEBUG'] = os.getenv('DEBUG', 'False') == 'True'
-
 cbapi = CoinbaseAdvAPI(app)
 tm = TradeManager(app)
 loc = LogOrConsole(app)  # Send to Log or Console or both
-
-# Example usage of the DEBUG environment variable
-if app.config['DEBUG']:
-    # print("Debugging is on")
-    loc.log_or_console(True, True, "D", None, "Debugging is ON")
-
 
 @app.route('/', methods=['GET'])
 def index():
@@ -140,15 +141,15 @@ def index():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     # print(":webhook:")
-    loc.log_or_console(True, True, "I", None, ":webhook:")
+    loc.log_or_console(True, "I", None, ":webhook:")
 
     # Parse the incoming JSON data
     data = request.json
 
     # print("\nReceived signal:")
-    loc.log_or_console(True, True, "I", None, "\nReceived signal:")
+    loc.log_or_console(True, "I", None, "\nReceived signal:")
     # pp(data)
-    loc.log_or_console(True, True, "I", None, data)
+    loc.log_or_console(True, "I", None, data)
 
     if 'signal' not in data:
         data['signal'] = 'test'
@@ -191,20 +192,6 @@ def webhook():
 
 # compare_daily = tm.compare_last_daily_to_todays_date()
 # print("compare_daily:", compare_daily)
-
-#######################
-# Get the the future products for BTC and store in DB
-# Then using this months future product, get the bid and ask prices
-# TODO: This should run once a day in the morning.
-# list_future_products = cbapi.list_products("FUTURE")
-# pp(list_future_products)
-# cbapi.store_btc_futures_products(list_future_products)
-#######################
-
-#######################
-# check_contract_expiration = tm.check_for_contract_expires()
-# print(check_contract_expiration)
-#######################
 
 #######################
 # List Orders
@@ -264,7 +251,7 @@ scheduler = APScheduler()
 
 @scheduler.task('interval', id='do_job_1', seconds=125, misfire_grace_time=900)
 def get_balance_summary_job():
-    loc.log_or_console(True, True, "D", None, ":get_balance_summary_job:")
+    loc.log_or_console(True, "D", None, ":get_balance_summary_job:")
 
     now = datetime.now(pytz.utc)
     # print("Is trading time?", tm.is_trading_time(now))
@@ -283,7 +270,7 @@ def get_balance_summary_job():
 @scheduler.task('interval', id='do_job_2', seconds=600, misfire_grace_time=900)
 def check_coinbase_futures_products_job():
     # print('\n:check_coinbase_futures_products_job:')
-    loc.log_or_console(True, True, "D", None, msg1=":check_coinbase_futures_products_job:")
+    loc.log_or_console(True, "D", None, msg1=":check_coinbase_futures_products_job:")
 
     now = datetime.now(pytz.utc)
     # print("Is trading time?", tm.is_trading_time(now))
@@ -298,7 +285,7 @@ def check_coinbase_futures_products_job():
 @scheduler.task('interval', id='do_job_3', seconds=30, misfire_grace_time=900)
 def check_trading_conditions_job():
     # print('\n:check_trading_conditions_job:')
-    loc.log_or_console(True, True, "D", None, msg1=":check_trading_conditions_job:")
+    loc.log_or_console(True, "D", None, msg1=":check_trading_conditions_job:")
 
     # NOTE: This is the main trading method with additional methods
     #   to check profit and loss, plus DCA and close out trades
@@ -314,7 +301,7 @@ def check_trading_conditions_job():
 @scheduler.task('interval', id='do_job_4', seconds=120, misfire_grace_time=900)
 def list_and_store_future_orders_job():
     # print('\n:list_and_store_future_orders_job:')
-    loc.log_or_console(True, True, "D", None, msg1=":list_and_store_future_orders_job:")
+    loc.log_or_console(True, "D", None, msg1=":list_and_store_future_orders_job:")
 
     #
     # Check if the market is open or not
@@ -325,7 +312,7 @@ def list_and_store_future_orders_job():
 
         future_product = cbapi.get_this_months_future()
         # print("future_product:", future_product)
-        loc.log_or_console(True, True, "I", "future_product", msg1=future_product.product_id)
+        loc.log_or_console(True, "I", "future_product", msg1=future_product.product_id)
 
         # ORDER TYPES:
         # [OPEN, FILLED, CANCELLED, EXPIRED, FAILED, UNKNOWN_ORDER_STATUS]
@@ -333,7 +320,7 @@ def list_and_store_future_orders_job():
         # List Orders
         # all_orders = cbapi.list_orders(product_id=future_product.product_id, order_status=None)
         ## print("all_orders count:", len(all_orders['orders']))
-        # loc.log_or_console(True, True, msg1="all_orders:", msg2=len(all_orders['orders']))
+        # loc.log_or_console(True, msg1="all_orders:", msg2=len(all_orders['orders']))
         #
         # if len(all_orders['orders']) > 0:
         #     cbapi.store_or_update_orders(all_orders)
@@ -345,10 +332,22 @@ def list_and_store_future_orders_job():
         for status in all_order_status:
             orders = cbapi.list_orders(product_id=future_product.product_id, order_status=status)
             # print(status, " orders count:", len(orders['orders']))
-            loc.log_or_console(True, True, "D", status, "orders cnt:", len(orders['orders']))
+            loc.log_or_console(True, "D", status, "orders cnt:", len(orders['orders']))
 
             if len(orders['orders']) > 0:
                 cbapi.store_or_update_orders(orders)
+
+# TODO: Need to adjust check for contract expires and switch a few days prior
+#  to the closing of the contract or we just let it
+#  go and reopen in the next contract trading session
+
+
+# @scheduler.task('interval', id='do_job_5', seconds=10, misfire_grace_time=900)
+# def check_for_contract_expires_job():
+#     # print('\n:check_for_contract_expires_job:')
+#     loc.log_or_console(True, "D", None, msg1=":check_for_contract_expires_job:")
+#
+#     tm.check_for_contract_expires()
 
 # @scheduler.task('interval', id='do_job_5', seconds=30, misfire_grace_time=900)
 # def list_future_positions_job():

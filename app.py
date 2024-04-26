@@ -14,6 +14,11 @@ import os
 import re
 
 
+# TODO: Explore finding a better time to open order within the Weekly / Daily Signal
+#   Might be using the 15 min signal to find best opportunity
+# TODO: If our position closes in our favor, then we need to close all open orders
+
+
 # set configuration values
 class Config:
     SCHEDULER_API_ENABLED = True
@@ -245,9 +250,13 @@ def list_and_store_future_orders_job():
 
     if tm.is_trading_time(now):
 
-        future_product = cbapi.get_relevant_future_from_db()
-        # print("future_product:", future_product)
-        loc.log_or_console(True, "I", "future_product", msg1=future_product.product_id)
+        next_month = cbapi.get_next_short_month_uppercase()
+        # loc.log_or_console(True, "I","next_month", next_month)
+
+        curret_future_product = cbapi.get_relevant_future_from_db()
+        next_months_future_product = cbapi.get_relevant_future_from_db(month_override=next_month)
+        loc.log_or_console(True, "I", "curret_future_product", msg1=curret_future_product.product_id)
+        loc.log_or_console(True, "I", "next_months_future_product", msg1=next_months_future_product.product_id)
 
         # ORDER TYPES:
         # [OPEN, FILLED, CANCELLED, EXPIRED, FAILED, UNKNOWN_ORDER_STATUS]
@@ -265,8 +274,14 @@ def list_and_store_future_orders_job():
         all_order_status = ["OPEN", "FILLED", "CANCELLED", "EXPIRED", "FAILED"]
         # all_order_status = ["OPEN"]
         for status in all_order_status:
-            orders = cbapi.list_orders(product_id=future_product.product_id, order_status=status)
-            # print(status, " orders count:", len(orders['orders']))
+            orders = cbapi.list_orders(product_id=curret_future_product.product_id, order_status=status)
+            loc.log_or_console(True, "D", status, "orders cnt:", len(orders['orders']))
+
+            if len(orders['orders']) > 0:
+                cbapi.store_or_update_orders(orders)
+
+        for status in all_order_status:
+            orders = cbapi.list_orders(product_id=next_months_future_product.product_id, order_status=status)
             loc.log_or_console(True, "D", status, "orders cnt:", len(orders['orders']))
 
             if len(orders['orders']) > 0:

@@ -31,7 +31,6 @@ UUID = os.getenv('UUID')
 #  Friday 5 PM ET (excluding observed holidays),
 #  with a 1-hour break each day from 5 PM – 6 PM ET
 
-# TODO: Monthly contract expiration
 
 class LogOrConsole:
 
@@ -629,14 +628,45 @@ class CoinbaseAdvAPI:
                                               product_id=product_id, product_type=product_type)
         return list_orders
 
-    def edit_order(self, order_id, size, price):
+    def edit_order(self, order_id, size=None, price=None):
         print("\n:edit_order:")
         # print("order_id:", order_id, type(order_id))
         # print("size:", size, type(size))
         # print("price:", price, type(price))
 
-        order_edited = self.client.edit_order(order_id=order_id, size=str(size), price=str(price))
-        print(" order_edited:", order_edited)
+        # TODO: Try using the JWT API call for this
+
+        """
+            import http.client
+            import json
+    
+            conn = http.client.HTTPSConnection("api.coinbase.com")
+            payload = json.dumps({
+              "price": "64145",
+              "size": "1",
+              "order_id": "2d8f61b6-418f-4af4-a72a-ac81c62339bb"
+            })
+            headers = {
+              'Content-Type': 'application/json'
+            }
+            conn.request("POST", "/api/v3/brokerage/orders/edit", payload, headers)
+            res = conn.getresponse()
+            data = res.read()
+            print(data.decode("utf-8"))
+        """
+
+        # def get_order(self, order_id: str, **kwargs) -> Dict[str, Any]:
+        #     """
+        #     **Get Order**
+
+        # get_order = self.client.get_order(order_id=order_id)
+        # pp(get_order)
+
+        # order_edited = self.client.edit_order(order_id=order_id, size=size, price=price)
+        # print(" order_edited:", order_edited)
+
+        # preview_edit_order = self.client.preview_edit_order(order_id=order_id, size=size, price=price)
+        # print(" preview_edit_order:", preview_edit_order)
 
         # post_order_edit_for_storing = {
         #         "order_id": order_edited['order_id'],
@@ -1017,6 +1047,14 @@ class TradeManager:
                 self.loc.log_or_console(True, "W", None, ">>> Contract has expired!")
                 self.loc.log_or_console(True, "W", None, ">>> Close out any positions!!!")
                 self.loc.log_or_console(True, "W", None, "-----------------------------------")
+                print("Switching to next month's contract.")
+
+                # Identify and switch to the next contract
+                next_month_product, next_month = self.find_next_month_contract(list_future_products, next_month)
+
+                if next_month_product:
+                    print("next_month_product.product_id:", next_month_product['product_id'])
+                    return next_month_product['product_id'], next_month
             elif days <= 3:
                 # If the contract expires in less than or equal to 3 days
                 print(f"Contract {current_future_product.product_id} is close to expiring"
@@ -1187,6 +1225,8 @@ class TradeManager:
         #######################
 
         next_months_product_id, next_month = self.check_for_contract_expires()
+        print("next_months_product_id:", next_months_product_id)
+        print("next_month:", next_month)
 
         # Get Current Positions from API
         future_positions = self.cb_adv_api.list_future_positions()
@@ -1388,8 +1428,6 @@ class TradeManager:
             # self.loc.log_or_console(True, "I", "  total_initial_cost:", total_initial_cost)
             # self.loc.log_or_console(True, "I", "  total_current_value:", total_current_value)
 
-            # REVIEW: Are we calculating this correctly?
-
             # Calculate profit or loss for all contracts
             # NOTE: We need to factor in what side of the market: long or short
             calc_profit_or_loss = 0
@@ -1398,8 +1436,6 @@ class TradeManager:
             elif position.side.lower() == 'short':  # Assuming 'sell' denotes a short position
                 calc_profit_or_loss = round(total_initial_cost - total_current_value, 4)
             # self.loc.log_or_console(True, "I", "  calc_profit_or_loss:", calc_profit_or_loss)
-
-            # REVIEW: Are we calculating this correctly?
 
             if total_initial_cost != 0:  # Prevent division by zero
                 calc_percentage = round((calc_profit_or_loss / total_initial_cost) * 100, 4)
@@ -1534,16 +1570,16 @@ class TradeManager:
             # pp(take_profit_order)
             order_id = take_profit_order['order_id']
             client_order_id = take_profit_order['client_order_id']
-            # print(" order_id:", order_id)
+            print(" order_id:", order_id)
             # print(" client_order_id:", client_order_id)
             self.loc.log_or_console(True, "I", "order_id", order_id)
             self.loc.log_or_console(True, "I", "client_order_id", client_order_id)
 
             # For limit GTC orders only
             size = take_profit_order['order_configuration']['limit_limit_gtc']['base_size']
-            # print(" take_profit_order size:", size)
+            print(" take_profit_order size:", size)
             # print(" number_of_contracts:", number_of_contracts)
-            # print(" take_profit_price:", take_profit_price)
+            print(" take_profit_price:", take_profit_price)
             self.loc.log_or_console(True, "I", "take_profit_order size", size)
             self.loc.log_or_console(True, "I", "number_of_contracts", number_of_contracts)
             self.loc.log_or_console(True, "I", "take_profit_price", take_profit_price)
@@ -1555,11 +1591,12 @@ class TradeManager:
                 print(" take_profit_order new_size:", new_size)
                 self.loc.log_or_console(True, "W", "take_profit_order new_size", new_size)
             else:
-                new_size = ""
+                new_size = size
+            # print(" take_profit_order new_size:", new_size)
 
-            # self.cb_adv_api.edit_order(order_id=order_id,
-            #                            size=new_size,
-            #                            price=take_profit_price)
+            # self.cb_adv_api.edit_order(order_id=str(order_id),
+            #                            size=str(2),
+            #                            price=None)
 
 
 if __name__ == "__main__":

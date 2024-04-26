@@ -252,7 +252,7 @@ class CoinbaseAdvAPI:
 
     def store_btc_futures_products(self, future_products):
         # print(":store_btc_futures_products:")
-        self.loc.log_or_console(True, "D", None, ":store_btc_futures_products:")
+        # self.loc.log_or_console(True, "D", None, ":store_btc_futures_products:")
         # print("future_products:", future_products, type(future_products))
 
         for future in future_products['products']:
@@ -317,48 +317,34 @@ class CoinbaseAdvAPI:
 
         return short_month
 
-    def get_this_months_future(self):
-        # print(":get_this_months_future:")
+    def get_relevant_future_from_db(self):
         self.loc.log_or_console(True, "D", None,
-                                ":get_this_months_future:")
+                                ":get_relevant_future_from_db:")
 
         # Find this months future product
         with self.flask_app.app_context():
             # Get the current month's short name in uppercase
             short_month = self.get_current_short_month_uppercase()
+
             # print(f"Searching for futures contracts for the month: {short_month}")
             self.loc.log_or_console(True, "I",
                                     "Searching for futures contracts for the month", short_month)
 
             # Search the database for a matching futures contract
-            future_entry = CoinbaseFuture.query.filter(
+            future_contract = CoinbaseFuture.query.filter(
                 CoinbaseFuture.display_name.contains(short_month)
             ).first()
 
-            if future_entry:
+            if future_contract:
                 # print("\nFound future entry:", future_entry)
                 self.loc.log_or_console(True, "I",
-                                        "Found future entry", future_entry)
-                return future_entry
+                                        "Found contract entry", future_contract)
+                return future_contract
             else:
                 # print("\n   No future entry found for this month.")
                 self.loc.log_or_console(True, "W",
-                                        None, "No future entry found for this month.")
+                                        None, "No future contract found for this month.")
                 return None
-
-    def get_current_future_product_from_db(self, product_id):
-        # print(":get_current_future_product_from_db:")
-        self.loc.log_or_console(True, "I", None, ":get_current_future_product_from_db:")
-
-        # TODO: May need to add a Month parameter and filter on that to get
-        #   next months product close to expiration
-
-        with self.flask_app.app_context():
-            # Check if the future product already exists in the database
-            future_product = CoinbaseFuture.query.filter_by(product_id=product_id).first()
-            # print("\nfound future_product:", future_product)
-
-        return future_product
 
     def list_future_positions(self):
         # print(":list_future_positions:")
@@ -856,7 +842,6 @@ class TradeManager:
     #         print('Aurox Signal TEST')
 
     def write_db_signal(self, data):
-        # print(":write_db_signal:")
         self.loc.log_or_console(True, "I", None, ":write_db_signal:")
 
         # TODO: May need to convert these timestamps from Aurox as they're in ISO format
@@ -888,25 +873,25 @@ class TradeManager:
                 #
                 # Now, get the bid and ask prices for the current futures product
                 #
-                current_future_product = self.cb_adv_api.get_this_months_future()
-                # print(" current_future_product:", current_future_product)
-                # print(" current_future_product product_id:", current_future_product.product_id)
+                relevant_future_product = self.cb_adv_api.get_relevant_future_from_db()
+                # print(" relevant_future_product:", relevant_future_product)
+                # print(" relevant_future_product product_id:", relevant_future_product.product_id)
 
                 # Get the current bid and ask prices for the futures product related to this signal
-                future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(current_future_product.product_id)
+                future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(relevant_future_product.product_id)
                 future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
                 future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
 
                 # Find the related futures product based on the current futures product
                 # Assuming the current futures product maps directly to product_id in your CoinbaseFuture model
-                if current_future_product:
+                if relevant_future_product:
                     # Create a FuturePriceAtSignal record linking the new signal and the futures product
                     new_future_price = FuturePriceAtSignal(
                         signal_spot_price=signal_spot_price,
                         future_bid_price=future_bid_price,
                         future_ask_price=future_ask_price,
                         signal_id=new_signal.id,
-                        future_id=current_future_product.id
+                        future_id=relevant_future_product.id
                     )
                     db.session.add(new_future_price)
                     # print("Associated bid/ask prices stored for the signal")
@@ -920,9 +905,9 @@ class TradeManager:
                 return None
 
     def get_latest_weekly_signal(self):
-        # print(":get_latest_weekly_signal:")
         # self.loc.log_or_console(True, "D", None,
         #                         ":get_latest_weekly_signal:")
+
         with self.flask_app.app_context():
             # Query the latest weekly signal including related future price data
             latest_signal = AuroxSignal.query \
@@ -933,9 +918,9 @@ class TradeManager:
             return latest_signal
 
     def get_latest_daily_signal(self):
-        # print(":get_latest_daily_signal:")
         # self.loc.log_or_console(True, "D", None,
         #                         ":get_latest_daily_signal:")
+
         with self.flask_app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
@@ -945,8 +930,8 @@ class TradeManager:
             return latest_signal
 
     def compare_last_daily_to_todays_date(self):
-        # print(":compare_last_daily_to_todays_date:")
         self.loc.log_or_console(True, "I", None, ":compare_last_daily_to_todays_date:")
+
         latest_signal = self.get_latest_daily_signal()
         if latest_signal:
             # Strip the 'Z' and parse the datetime
@@ -975,7 +960,6 @@ class TradeManager:
                                     "No daily signal found.")
 
     def check_for_contract_expires(self):
-        # print(":check_for_contract_expires:")
         self.loc.log_or_console(True, "D", None,
                                 ":check_for_contract_expires:")
 
@@ -983,14 +967,24 @@ class TradeManager:
         #  Friday 5 PM ET (excluding observed holidays),
         #  with a 1-hour break each day from 5 PM – 6 PM ET
 
+        # TODO: Need to adjust check for contract expires and switch a few days prior
+        #  to the closing of the contract or we just let it
+        #  go and reopen in the next contract trading session
+
+        # Get the futures contract from Coinbase API
         list_future_products = self.cb_adv_api.list_products("FUTURE")
 
         current_month = self.cb_adv_api.get_current_short_month_uppercase()
+        self.loc.log_or_console(True, "I",
+                                "current_month",
+                                current_month)
 
         self.cb_adv_api.store_btc_futures_products(list_future_products)
 
-        current_future_product = self.cb_adv_api.get_this_months_future()
-        # print(" current_future_product:", current_future_product.product_id)
+        current_future_product = self.cb_adv_api.get_relevant_future_from_db()
+        self.loc.log_or_console(True, "I",
+                                "current_future_product",
+                                current_future_product.product_id)
 
         if current_future_product:
             # Make sure contract_expiry is timezone-aware
@@ -1015,7 +1009,7 @@ class TradeManager:
                 self.loc.log_or_console(True, "W", None, "Contract has expired, close trades.")
                 self.loc.log_or_console(True, "W", None, ">>> Close out any positions!!!")
                 self.loc.log_or_console(True, "W", None, "-----------------------------------")
-            elif days <= 1:
+            elif days <= 2:
 
                 # TODO: Need to switch to next months contract if this close
 
@@ -1043,7 +1037,6 @@ class TradeManager:
             print(" No future product found for this month.")
 
     def ladder_orders(self, side, product_id, bid_price, ask_price):
-        # print(":ladder_orders:")
         self.loc.log_or_console(True, "D", None, ":ladder_orders:")
 
         # NOTE: This is part of our strategy in placing DCA limit orders if the trade goes against us,
@@ -1283,15 +1276,15 @@ class TradeManager:
                     #######################
 
                     # Get this months current product
-                    current_future_product = self.cb_adv_api.get_this_months_future()
-                    # print(" current_future_product:", current_future_product.product_id)
-                    self.loc.log_or_console(True, "I", "current_future_product", current_future_product.product_id)
+                    relevant_future_product = self.cb_adv_api.get_relevant_future_from_db()
+                    # print(" relevant_future_product:", relevant_future_product.product_id)
+                    self.loc.log_or_console(True, "I", "relevant_future_product", relevant_future_product.product_id)
 
-                    product_id = current_future_product.product_id
+                    product_id = relevant_future_product.product_id
 
                     # Get Current Bid Ask Prices
                     cur_future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(
-                        current_future_product.product_id)
+                        relevant_future_product.product_id)
                     cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
                     cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
                     # print(f" Prd: {product_id} - "
@@ -1320,7 +1313,7 @@ class TradeManager:
                     #   that position(s) is closed and we have good signals again.
 
                     self.cb_adv_api.create_order(side=trade_side,
-                                                 product_id=current_future_product.product_id,
+                                                 product_id=relevant_future_product.product_id,
                                                  size=size,
                                                  limit_price=None,
                                                  leverage=leverage,
@@ -1362,10 +1355,10 @@ class TradeManager:
             # print("position.product_id:", product_id)
             # print("position.side:", side)
 
-            current_future_product = self.cb_adv_api.get_current_future_product_from_db(product_id)
-            # pp(current_future_product)
+            relevant_future_product = self.cb_adv_api.get_relevant_future_from_db()
+            pp(relevant_future_product)
 
-            product_contract_size = current_future_product.contract_size
+            product_contract_size = relevant_future_product.contract_size
             # print(" product_contract_size:", product_contract_size)
 
             avg_entry_price = round(position.avg_entry_price, 2)
@@ -1403,9 +1396,6 @@ class TradeManager:
 
             # print("Contract Expires on", future_position['position']['expiration_time'])
             # print(" Contract Expires on", position.expiration_time)
-
-            # Check when the product contract expires and print it out
-            # self.check_for_contract_expires()
 
             # print("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>")
             # print(">>> Profit / Loss <<<")

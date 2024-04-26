@@ -84,9 +84,9 @@ def create_app():
         filename=os.path.join(log_directory, 'flask_app.log'),
         when='H',
         interval=4,
-        backupCount=120  # currently keeps 30 days of logs (120 rotations * 6 hours)
+        backupCount=180  # currently keeps 30 days of logs (120 rotations * 4 hours)
     )
-    handler.suffix = "%Y-%m-%d %H:%M:%S"  # Date Time format
+    handler.suffix = "%Y-%m-%d %H.%M.%S"  # Date Time format
     handler.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$")  # Ensures only files with dates are matched
 
     handler.setFormatter(logging.Formatter(
@@ -173,70 +173,6 @@ def webhook():
 
 
 #######################
-# TODO: Now we know if we're within range of the last Daily
-#   and should have placed an order (market?)
-#   Do we then place some limit orders for spikes or bounces?
-
-# TODO: Should we do the DCA limit orders, then track the DCA with
-#   placing a moving limit order for the opposing side to take profit?
-#######################
-
-#######################
-# Get Porfolios
-# porfolio_uuid = cbapi.get_portfolios()
-# print("porfolio_uuid:", porfolio_uuid)
-
-# porfolio_breakdown = cbapi.get_portfolio_breakdown(portfolio_uuid=porfolio_uuid)
-# print("porfolio_breakdown:", porfolio_breakdown)
-#######################
-
-# compare_daily = tm.compare_last_daily_to_todays_date()
-# print("compare_daily:", compare_daily)
-
-#######################
-# List Orders
-# future_product = cbapi.get_this_months_future()
-# open_orders = cbapi.list_orders(product_id=future_product.product_id, order_status="OPEN")
-# pp(open_orders)
-
-# filled_orders = cbapi.list_orders(product_id=future_product.product_id, order_status="FILLED")
-# pp(filled_orders)
-
-# cbapi.store_orders(open_orders)
-# cbapi.store_orders(filled_orders)
-#######################
-
-#######################
-# Get Current Positions
-# future_positions = cbapi.get_future_position('BIT-26APR24-CDE')
-# pp(future_positions)
-#######################
-
-#######################
-# Get Current Bid Ask Prices
-# current_future_product = cbapi.get_this_months_future()
-# print("current_future_product:", current_future_product)
-#
-# future_bid_ask_price = cbapi.get_current_bid_ask_prices(current_future_product.product_id)
-# future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
-# future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
-# print("bid:", future_bid_price, "ask:", future_ask_price)
-#######################
-
-#######################
-# List Products
-# list_products = cbapi.list_products()
-# pp(list_products)
-#######################
-
-#######################
-# Get Product
-# get_product = cbapi.get_product("BIT-26APR24-CDE")
-# pp(get_product)
-#######################
-
-
-#######################
 # AP Scheduler
 #######################
 
@@ -268,9 +204,8 @@ def get_balance_summary_job():
 
 # Runs every 6 hours
 @scheduler.task('interval', id='do_job_2', seconds=600, misfire_grace_time=900)
-def check_coinbase_futures_products_job():
-    # print('\n:check_coinbase_futures_products_job:')
-    loc.log_or_console(True, "D", None, msg1=":check_coinbase_futures_products_job:")
+def get_coinbase_futures_products_job():
+    loc.log_or_console(True, "D", None, msg1=":get_coinbase_futures_products_job:")
 
     now = datetime.now(pytz.utc)
     # print("Is trading time?", tm.is_trading_time(now))
@@ -291,7 +226,6 @@ def check_trading_conditions_job():
     #   to check profit and loss, plus DCA and close out trades
 
     now = datetime.now(pytz.utc)
-    # print("Is trading time?", tm.is_trading_time(now))
 
     # Check if the market is open or not
     if tm.is_trading_time(now):
@@ -310,7 +244,7 @@ def list_and_store_future_orders_job():
 
     if tm.is_trading_time(now):
 
-        future_product = cbapi.get_this_months_future()
+        future_product = cbapi.get_relevant_future_from_db()
         # print("future_product:", future_product)
         loc.log_or_console(True, "I", "future_product", msg1=future_product.product_id)
 
@@ -336,109 +270,6 @@ def list_and_store_future_orders_job():
 
             if len(orders['orders']) > 0:
                 cbapi.store_or_update_orders(orders)
-
-# TODO: Need to adjust check for contract expires and switch a few days prior
-#  to the closing of the contract or we just let it
-#  go and reopen in the next contract trading session
-
-
-# @scheduler.task('interval', id='do_job_5', seconds=10, misfire_grace_time=900)
-# def check_for_contract_expires_job():
-#     # print('\n:check_for_contract_expires_job:')
-#     loc.log_or_console(True, "D", None, msg1=":check_for_contract_expires_job:")
-#
-#     tm.check_for_contract_expires()
-
-# @scheduler.task('interval', id='do_job_5', seconds=30, misfire_grace_time=900)
-# def list_future_positions_job():
-#     print('\n:list_future_positions_job:')
-#     # Get Current Positions
-#     future_positions = cbapi.list_future_positions()
-#     # pp(future_positions)
-#     cbapi.store_future_positions(future_positions)
-
-# @scheduler.task('interval', id='do_job_6', seconds=150000, misfire_grace_time=900)
-# def test_ladder_orders_job():
-#     print('\n:test_ladder_orders_job:')
-#
-#     # Get this months current product
-#     current_future_product = cbapi.get_this_months_future()
-#     print(" current_future_product:", current_future_product.product_id)
-#
-#     # Get Current Bid Ask Prices
-#     cur_future_bid_ask_price = cbapi.get_current_bid_ask_prices(
-#         current_future_product.product_id)
-#     cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
-#     cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
-#     print(f" Prd: {current_future_product.product_id} - "
-#           f"Current Futures: bid: ${cur_future_bid_price} "
-#           f"ask: ${cur_future_ask_price}")
-#
-#     # side = "BUY"
-#     side = "SELL"
-#
-#     tm.ladder_orders(side=side,
-#                      product_id=current_future_product.product_id,
-#                      bid_price=cur_future_bid_price,
-#                      ask_price=cur_future_ask_price)
-
-# @scheduler.task('interval', id='do_job_6', seconds=150000, misfire_grace_time=900)
-# def test_create_order_job():
-#     print('\n:test_create_order_job:')
-#
-#     # Get this months current product
-#     current_future_product = cbapi.get_this_months_future()
-#     print(" current_future_product:", current_future_product.product_id)
-#
-#     # Get Current Bid Ask Prices
-#     cur_future_bid_ask_price = cbapi.get_current_bid_ask_prices(
-#         current_future_product.product_id)
-#     cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
-#     cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
-#     print(f" Prd: {current_future_product.product_id} - "
-#           f"Current Futures: bid: ${cur_future_bid_price} "
-#           f"ask: ${cur_future_ask_price}")
-#
-#
-#     two_percent_offset = int(float(cur_future_bid_price) * 0.02)
-#     print(" two_percent_offset:", two_percent_offset)
-#
-#     # side = "BUY"
-#     side = "SELL"
-#
-#     if side == "BUY":
-#         # BUY / LONG
-#         limit_price = cbapi.adjust_price_to_nearest_increment(
-#             int(cur_future_bid_price) - two_percent_offset)
-#         print(" Buy Long limit_price: $", limit_price)
-
-#     elif side == "SELL":
-#         # SELL / SHORT
-#         limit_price = cbapi.adjust_price_to_nearest_increment(
-#             int(cur_future_ask_price) + two_percent_offset)
-#         print(" Sell Short limit_price: $", limit_price)
-#
-#     size = "1"
-#     leverage = "3"
-#
-#     order_type = "market_market_ioc"
-#     # order_type = "limit_limit_gtc"
-#
-#     # cbapi.create_order(side=side,
-#     #                    product_id=current_future_product.product_id,
-#     #                    size=size,
-#     #                    limit_price=limit_price,
-#     #                    leverage=leverage,
-#     #                    order_type=order_type)
-
-
-# if you don't wanna use a config, you can set options here:
-# scheduler.api_enabled = True
-
-# @scheduler.task('interval', id='do_job_10', seconds=30, misfire_grace_time=900)
-# def testing():
-#     print('\n:testing:')
-
 
 scheduler.init_app(app)
 scheduler.start()

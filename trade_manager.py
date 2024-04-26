@@ -10,7 +10,7 @@ from pprint import pprint as pp
 from datetime import datetime, time
 import pytz
 import os
-import json
+import calendar
 import uuid
 
 load_dotenv()
@@ -31,13 +31,7 @@ UUID = os.getenv('UUID')
 #  Friday 5 PM ET (excluding observed holidays),
 #  with a 1-hour break each day from 5 PM – 6 PM ET
 
-# TODO: Make coinbase into class library for importing into Flask
-# TODO: Setup trading logic
-# TODO: Create Buy order for long or short
-# TODO: Create Close order for long or short
-# TODO: Parse Aurox signal Daily and Weekly
 # TODO: Monthly contract expiration
-# TODO: Need to factor in trading hours
 
 class LogOrConsole:
 
@@ -314,17 +308,31 @@ class CoinbaseAdvAPI:
 
         # Format the month to short format and convert it to uppercase
         short_month = current_date.strftime('%b').upper()
-
         return short_month
 
-    def get_relevant_future_from_db(self):
+    @staticmethod
+    def get_next_short_month_uppercase():
+        # Get the current datetime
+        current_date = datetime.now()
+
+        # Determine the month and handle year rollover
+        year = current_date.year + (current_date.month // 12)
+        next_month = (current_date.month % 12) + 1
+        next_short_month = calendar.month_abbr[next_month].upper()
+        return next_short_month
+
+    def get_relevant_future_from_db(self, month_override=None):
         self.loc.log_or_console(True, "D", None,
                                 ":get_relevant_future_from_db:")
 
         # Find this months future product
         with self.flask_app.app_context():
+
             # Get the current month's short name in uppercase
             short_month = self.get_current_short_month_uppercase()
+
+            if month_override:
+                short_month = month_override
 
             # print(f"Searching for futures contracts for the month: {short_month}")
             self.loc.log_or_console(True, "I",
@@ -338,7 +346,7 @@ class CoinbaseAdvAPI:
             if future_contract:
                 # print("\nFound future entry:", future_entry)
                 self.loc.log_or_console(True, "I",
-                                        "Found contract entry", future_contract)
+                                        "Found future contract", future_contract.product_id)
                 return future_contract
             else:
                 # print("\n   No future entry found for this month.")
@@ -961,7 +969,7 @@ class TradeManager:
 
     def check_for_contract_expires(self):
         self.loc.log_or_console(True, "D", None,
-                                ":check_for_contract_expires:")
+                                ":NEW_check_for_contract_expires:")
 
         # NOTE: Futures markets are open for trading from Sunday 6 PM to
         #  Friday 5 PM ET (excluding observed holidays),
@@ -973,68 +981,79 @@ class TradeManager:
 
         # Get the futures contract from Coinbase API
         list_future_products = self.cb_adv_api.list_products("FUTURE")
+        self.cb_adv_api.store_btc_futures_products(list_future_products)
+
+        # Get the current month's contract
+        current_future_product = self.cb_adv_api.get_relevant_future_from_db()
+        self.loc.log_or_console(True, "I",
+                                "current_future_product",
+                                current_future_product.product_id)
 
         current_month = self.cb_adv_api.get_current_short_month_uppercase()
         self.loc.log_or_console(True, "I",
                                 "current_month",
                                 current_month)
 
-        self.cb_adv_api.store_btc_futures_products(list_future_products)
-
-        current_future_product = self.cb_adv_api.get_relevant_future_from_db()
+        next_month = self.cb_adv_api.get_next_short_month_uppercase()
         self.loc.log_or_console(True, "I",
-                                "current_future_product",
-                                current_future_product.product_id)
+                                "next_month",
+                                next_month)
 
         if current_future_product:
-            # Make sure contract_expiry is timezone-aware
             contract_expiry = current_future_product.contract_expiry.replace(tzinfo=pytz.utc)
-            # print("Contract expiry:", contract_expiry)
-
-            # Current time in UTC
             now = datetime.now(pytz.utc)
-            # print("Now:", now)
-
-            # Calculate time difference
             time_diff = contract_expiry - now
-            # print("total_seconds:", time_diff.total_seconds())
 
-            days = time_diff.days
-            hours, remainder = divmod(time_diff.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
+            days, seconds = time_diff.days, time_diff.seconds
+            hours = seconds // 3600
+            minutes = (seconds % 3600) // 60
+
+            # FOR TESTING ONLY
+            # days = 10
 
             # Check if the contract has expired
             if time_diff.total_seconds() <= 0:
                 self.loc.log_or_console(True, "W", None, "-----------------------------------")
-                self.loc.log_or_console(True, "W", None, "Contract has expired, close trades.")
+                self.loc.log_or_console(True, "W", None, ">>> Contract has expired!")
                 self.loc.log_or_console(True, "W", None, ">>> Close out any positions!!!")
                 self.loc.log_or_console(True, "W", None, "-----------------------------------")
-            elif days <= 2:
+            elif days <= 3:
+                # If the contract expires in less than or equal to 3 days
+                print(f"Contract {current_future_product.product_id} is close to expiring"
+                      f" in {days} days, {hours} hours, and {minutes} minutes.")
+                print("Switching to next month's contract.")
 
-                # TODO: Need to switch to next months contract if this close
+                # Identify and switch to the next contract
+                next_month_product, next_month = self.find_next_month_contract(list_future_products, next_month)
 
-                self.loc.log_or_console(True, "W", None, "-----------------------------------")
-                self.loc.log_or_console(True, "W", None, "Contract is close to expiring!")
-                self.loc.log_or_console(True, "W", None, "Switch to next months contract")
-                self.loc.log_or_console(True, "W", None, ">>> Close out any positions!!!")
-                self.loc.log_or_console(True, "W", None, "-----------------------------------")
-                contract_msg = ("\n-------------------------"
-                                f"\nContract for:"
-                                f"\n  {current_future_product.product_id}"
-                                f"\n  Month: {current_month}"
-                                f"\n  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds."
-                                "\n-------------------------")
-                self.loc.log_or_console(True, "W", None, contract_msg)
+                if next_month_product:
+                    print("next_month_product.product_id:", next_month_product['product_id'])
+                    return next_month_product['product_id'], next_month
             else:
-                contract_msg = ("\n-------------------------"
-                                f"\nContract for:"
-                                f"\n  {current_future_product.product_id}"
-                                f"\n  Month: {current_month}"
-                                f"\n  expires in {days} days, {hours} hours, {minutes} minutes, and {seconds} seconds."
-                                "\n-------------------------")
-                self.loc.log_or_console(True, "I", None, contract_msg)
+                print(
+                    f"Current contract {current_future_product.product_id} is safe to trade. "
+                    f"It expires in {days} days, {hours} hours, and {minutes} minutes.")
+                return None, None
         else:
-            print(" No future product found for this month.")
+            print("No current future product found.")
+            return None, None
+
+    @staticmethod
+    def find_next_month_contract(future_products, next_month):
+        """Identify the next month's future contract based on the current product."""
+        # print("future_products:")
+        next_contact = None
+        for fp in future_products['products']:
+            f_products_contract_root_unit = fp['future_product_details']['contract_root_unit']
+
+            # Limit to only BTC contacts
+            if f_products_contract_root_unit == "BTC":
+                display_name = fp['display_name']
+
+                # Filter down to the next month futures contract
+                if next_month in display_name:
+                    next_contact = fp
+        return next_contact, next_month
 
     def ladder_orders(self, side, product_id, bid_price, ask_price):
         self.loc.log_or_console(True, "D", None, ":ladder_orders:")
@@ -1120,7 +1139,6 @@ class TradeManager:
                                      order_type=order_type)
 
     def is_trading_time(self, current_time):
-        # print("---> Checking for open market...")
         self.loc.log_or_console(True, "I", None, "---> Checking for open market...")
         """Check if the current time is within trading hours.
             Trading hours are Sunday 6 PM to Friday 5 PM ET, with a break from 5 PM to 6 PM daily.
@@ -1153,26 +1171,22 @@ class TradeManager:
 
         # Determine if it's a valid trading time
         if is_during_week and (is_before_break or is_after_break):
-            # print(" >>> Futures market is OPEN! <<<")
             self.loc.log_or_console(True, "I", None, " >>> Futures market is OPEN! <<<")
             return True
         elif is_sunday_after_6pm or is_friday_before_5pm:
-            # print(" >>> Futures market is OPEN! <<<")
             self.loc.log_or_console(True, "I", None, " >>> Futures market is OPEN! <<<")
             return True
-        # print(" >>> Futures market is CLOSED. <<<")
         self.loc.log_or_console(True, "W", None, " >>> Futures market is CLOSED. <<<")
         return False
 
     def check_trading_conditions(self):
-        # print(":check_trading_conditions:")
         self.loc.log_or_console(True, "D", None, ":check_trading_conditions:")
 
         #######################
         # Do we have an existing trades?
         #######################
 
-        self.check_for_contract_expires()
+        next_months_product_id, next_month = self.check_for_contract_expires()
 
         # Get Current Positions from API
         future_positions = self.cb_adv_api.list_future_positions()
@@ -1191,12 +1205,10 @@ class TradeManager:
                 try:
                     positions = FuturePosition.query.all()
                     for position in positions:
-                        self.tracking_current_position_profit_loss(position)
+                        self.tracking_current_position_profit_loss(position, next_month)
                         self.track_take_profit_order(position)
                 except Exception as e:
-                    # print(f"Unexpected error: {e}")
                     self.loc.log_or_console(True, "E", "Unexpected error:", msg1=e)
-
         else:
             #######################
             # If not, then is it a good time to place a market order?
@@ -1240,6 +1252,8 @@ class TradeManager:
                 minutes = int((total_seconds % 3600) // 60)  # Remainder from hrs divided by number of secs in a min
                 seconds = int(total_seconds % 60)  # Remainder from minutes
 
+                # NOTE: Are we within 1 day from the Weekly and Daily Aurox signal?
+                #   If so, then let's proceed with out trading
                 if days <= 1:
                     # print(">>> We should place a trade!")
                     self.loc.log_or_console(True, "I", None, ">>> We should place a trade!")
@@ -1275,21 +1289,22 @@ class TradeManager:
                     # Now lets check the Futures market (we should store in logging)
                     #######################
 
-                    # Get this months current product
-                    relevant_future_product = self.cb_adv_api.get_relevant_future_from_db()
-                    # print(" relevant_future_product:", relevant_future_product.product_id)
-                    self.loc.log_or_console(True, "I", "relevant_future_product", relevant_future_product.product_id)
+                    # Check to see if next months product id is populated
+                    if next_months_product_id is None:
 
-                    product_id = relevant_future_product.product_id
+                        # Get this months current product
+                        relevant_future_product = self.cb_adv_api.get_relevant_future_from_db()
+                        self.loc.log_or_console(True, "I", "relevant_future_product",
+                                                relevant_future_product.product_id)
+
+                        product_id = relevant_future_product.product_id
+                    else:
+                        product_id = next_months_product_id
 
                     # Get Current Bid Ask Prices
-                    cur_future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(
-                        relevant_future_product.product_id)
+                    cur_future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(product_id)
                     cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
                     cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
-                    # print(f" Prd: {product_id} - "
-                    #       f"Current Futures: bid: ${cur_future_bid_price} "
-                    #       f"ask: ${cur_future_ask_price}")
                     cur_prices_msg = (f" Prd: {product_id} - "
                                       f"Current Futures: bid: ${cur_future_bid_price} "
                                       f"ask: ${cur_future_ask_price}")
@@ -1313,7 +1328,7 @@ class TradeManager:
                     #   that position(s) is closed and we have good signals again.
 
                     self.cb_adv_api.create_order(side=trade_side,
-                                                 product_id=relevant_future_product.product_id,
+                                                 product_id=product_id,
                                                  size=size,
                                                  limit_price=None,
                                                  leverage=leverage,
@@ -1324,16 +1339,11 @@ class TradeManager:
                                        bid_price=cur_future_bid_price,
                                        ask_price=cur_future_ask_price)
                 else:
-                    # print("Too far of gab between the last daily and today")
-                    # print(f"Time difference: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
                     self.loc.log_or_console(True, "W", None,
                                             "Too far of gab between the last daily and today")
                     time_diff_msg = f"{days} days, {hours} hours, {minutes} minutes, {seconds} seconds"
                     self.loc.log_or_console(True, "W", "Time difference", time_diff_msg)
             else:
-                # print("Weekly Signal and Daily Signal DO NOT align, let's wait...")
-                # print(f"    Weekly | Signal: {weekly_signals.signal} | Date: {weekly_ts_formatted}")
-                # print(f"    Daily | Signal: {daily_signals.signal} | Date: {daily_ts_formatted}")
                 self.loc.log_or_console(True, "W", None,
                                         "Weekly Signal and Daily Signal DO NOT align, let's wait...")
 
@@ -1342,7 +1352,7 @@ class TradeManager:
                 self.loc.log_or_console(True, "W", None, weekly_msg)
                 self.loc.log_or_console(True, "W", None, daily_msg)
 
-    def tracking_current_position_profit_loss(self, position):
+    def tracking_current_position_profit_loss(self, position, next_month):
         # print(":tracking_current_position_profit_loss:")
         self.loc.log_or_console(True, "D", None, ":tracking_current_position_profit_loss:")
 
@@ -1352,80 +1362,74 @@ class TradeManager:
         if position:
             product_id = position.product_id
             side = position.side
-            # print("position.product_id:", product_id)
-            # print("position.side:", side)
+            self.loc.log_or_console(True, "I", "  position.side:", side)
 
-            relevant_future_product = self.cb_adv_api.get_relevant_future_from_db()
-            pp(relevant_future_product)
+            # print("next_month:", next_month)
+            # self.loc.log_or_console(True, "I", "  next_month:", next_month)
+
+            relevant_future_product = self.cb_adv_api.get_relevant_future_from_db(month_override=next_month)
 
             product_contract_size = relevant_future_product.contract_size
-            # print(" product_contract_size:", product_contract_size)
+            # self.loc.log_or_console(True, "I", "  product_contract_size:", product_contract_size)
 
             avg_entry_price = round(position.avg_entry_price, 2)
             current_price = round(position.current_price, 2)
-            # print("     avg_entry_price:", avg_entry_price)
-            # print("     current_price:", current_price)
-            self.loc.log_or_console(True, "I", "  avg_entry_price:", avg_entry_price)
-            self.loc.log_or_console(True, "I", "  current_price:", current_price)
+            # self.loc.log_or_console(True, "I", "  avg_entry_price:", avg_entry_price)
+            # self.loc.log_or_console(True, "I", "  current_price:", current_price)
 
             number_of_contracts = position.number_of_contracts
-            # print("     number_of_contracts:", number_of_contracts)
-            self.loc.log_or_console(True, "I", "  number_of_contracts:", number_of_contracts)
+            # self.loc.log_or_console(True, "I", "  number_of_contracts:", number_of_contracts)
 
             # Calculate total cost and current value per contract
-            total_initial_cost = round(avg_entry_price * number_of_contracts * product_contract_size, 3)
-            total_current_value = round(current_price * number_of_contracts * product_contract_size, 3)
-            # print("     total_initial_cost:", total_initial_cost)
-            # print("     total_current_value:", total_current_value)
-            self.loc.log_or_console(True, "I", "  total_initial_cost:", total_initial_cost)
-            self.loc.log_or_console(True, "I", "  total_current_value:", total_current_value)
+            # total_initial_cost = round(avg_entry_price * number_of_contracts * product_contract_size, 3)
+            total_initial_cost = avg_entry_price * number_of_contracts * product_contract_size
+            # total_current_value = round(current_price * number_of_contracts * product_contract_size, 3)
+            total_current_value = current_price * number_of_contracts * product_contract_size
+            # self.loc.log_or_console(True, "I", "  total_initial_cost:", total_initial_cost)
+            # self.loc.log_or_console(True, "I", "  total_current_value:", total_current_value)
+
+            # REVIEW: Are we calculating this correctly?
 
             # Calculate profit or loss for all contracts
-            calc_profit_or_loss = round(total_initial_cost - total_current_value)
-            # print(f"    calc_profit_or_loss: ${calc_profit_or_loss:.2f}")
-            self.loc.log_or_console(True, "I", "  calc_profit_or_loss:", calc_profit_or_loss)
+            # NOTE: We need to factor in what side of the market: long or short
+            calc_profit_or_loss = 0
+            if position.side.lower() == 'long':  # Assuming 'buy' denotes a long position
+                calc_profit_or_loss = round(total_current_value - total_initial_cost, 4)
+            elif position.side.lower() == 'short':  # Assuming 'sell' denotes a short position
+                calc_profit_or_loss = round(total_initial_cost - total_current_value, 4)
+            # self.loc.log_or_console(True, "I", "  calc_profit_or_loss:", calc_profit_or_loss)
 
-            # Percentage change: (New Value - Original Value) / Original Value × 100
+            # REVIEW: Are we calculating this correctly?
+
             if total_initial_cost != 0:  # Prevent division by zero
-                # calc_percentage = round((avg_entry_price - current_price) / current_price * 100, 3)
-                calc_percentage = round((calc_profit_or_loss / total_initial_cost) * 100, 3)
+                calc_percentage = round((calc_profit_or_loss / total_initial_cost) * 100, 4)
             else:
                 calc_percentage = 0
-            # print(f"    calc_percentage: %{calc_percentage}")
-            self.loc.log_or_console(True, "I", "  calc_percentage:", calc_percentage)
+            # self.loc.log_or_console(True, "I", "  calc_percentage:", calc_percentage)
 
             # print("Contract Expires on", future_position['position']['expiration_time'])
             # print(" Contract Expires on", position.expiration_time)
 
-            # print("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-            # print(">>> Profit / Loss <<<")
             self.loc.log_or_console(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
             self.loc.log_or_console(True, "I", None, ">>> Profit / Loss <<<")
+            self.loc.log_or_console(True, "I", "Avg Entry Price $", avg_entry_price)
+            self.loc.log_or_console(True, "I", "Current Price $", current_price)
+            self.loc.log_or_console(True, "I", "# of Contracts", number_of_contracts)
             if calc_percentage >= 2:
-                # print(f"    Take profit at 2% or higher %{calc_percentage}")
-                # print(f"    Good Profit: ${calc_profit_or_loss:.2f}")
                 self.loc.log_or_console(True, "I", "Take profit at 2% or higher %", calc_percentage)
                 self.loc.log_or_console(True, "I", "Good Profit $", calc_profit_or_loss)
             elif 2 > calc_percentage > 0.5:
-                # print(f"    Not ready to take profit %{calc_percentage}")
-                # print(f"    Ok Profit: ${calc_profit_or_loss:.2f}")
                 self.loc.log_or_console(True, "I", "Not ready to take profit %", calc_percentage)
                 self.loc.log_or_console(True, "I", "Ok Profit $", calc_profit_or_loss)
             elif 0.5 >= calc_percentage >= 0:
-                # print(f"    Neutral  %{calc_percentage}")
-                # print(f"    Not enough profit: ${calc_profit_or_loss:.2f}")
                 self.loc.log_or_console(True, "I", "Neutral %", calc_percentage)
                 self.loc.log_or_console(True, "I", "Not enough profit $", calc_profit_or_loss)
             elif calc_percentage < 0:
-                # print(f"    Trade negative %{calc_percentage}")
-                # print(f"    No profit, loss of: ${calc_profit_or_loss:.2f}")
                 self.loc.log_or_console(True, "I", "Trade negative %", calc_percentage)
                 self.loc.log_or_console(True, "I", "No profit, loss of $", calc_profit_or_loss)
-            # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>")
             self.loc.log_or_console(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
         else:
-            # print(f"    No open positions: {position}")
             self.loc.log_or_console(True, "W", "No open positions", position)
 
     def track_take_profit_order(self, position):
@@ -1471,7 +1475,6 @@ class TradeManager:
                 # pp(order)
                 existing_take_profit_order = True
                 take_profit_order = order
-                # 'client_order_id': 'c7ba9320-4423-4593-bcc3-0f1f928a1106',
 
         # TODO: Need to test if the average price changes based on more positions (contracts)
 
@@ -1500,14 +1503,12 @@ class TradeManager:
         if side == "LONG":  # BUY / LONG
             take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
                 int(avg_entry_price) + take_profit_offset_price)
-            # print(" SELL Short take_profit_price: $", take_profit_price)
             self.loc.log_or_console(True, "I", "SELL Short take_profit_price: $", take_profit_price)
 
         # If we're SHORT, then we need to place a profitable BUY order
         elif side == "SHORT":  # SELL / SHORT
             take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
                 int(avg_entry_price) - take_profit_offset_price)
-            # print(" BUY Long take_profit_price: $", take_profit_price)
             self.loc.log_or_console(True, "I", "BUY Long take_profit_price: $", take_profit_price)
 
         # leverage = "3"

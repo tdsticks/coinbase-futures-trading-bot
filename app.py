@@ -220,7 +220,8 @@ def get_coinbase_futures_products_job():
 @scheduler.task('interval', id='do_job_3', seconds=30, misfire_grace_time=900)
 def check_trading_conditions_job():
     # print('\n:check_trading_conditions_job:')
-    loc.log_or_console(True, "D", None, msg1=":check_trading_conditions_job:")
+    loc.log_or_console(True, "I", None, msg1="")
+    loc.log_or_console(True, "I", None, msg1=":check_trading_conditions_job:")
 
     # NOTE: This is the main trading method with additional methods
     #   to check profit and loss, plus DCA and close out trades
@@ -270,6 +271,7 @@ def list_and_store_future_orders_job():
 
             if len(orders['orders']) > 0:
                 cbapi.store_or_update_orders(orders)
+
 
 scheduler.init_app(app)
 scheduler.start()

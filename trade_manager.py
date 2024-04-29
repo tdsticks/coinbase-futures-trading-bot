@@ -538,8 +538,7 @@ class CoinbaseAdvAPI:
         # limit_price
         # Ceiling price for which the order should get filled.
 
-        # A unique UUID that we make (should store and not repeat, must be in UUID format
-        # TODO: Need to store this value in the DB
+        # NOTE: A unique UUID that we make (should store and not repeat, must be in UUID format
         # Generate and print a UUID4
         client_order_id = self.generate_uuid4()
         # print("Generated client_order_id:", client_order_id, type(client_order_id))
@@ -858,13 +857,15 @@ class CoinbaseAdvAPI:
                     # Commit changes or new entry to the database
                     db.session.commit()
 
-                    # TODO: Should switch to logging for these
-
-                    print(f"    Order Client ID:{client_order_id} processed: {'updated' if order.id else 'created'}")
+                    order_stored = f"    Order Client ID:{client_order_id} processed: {'updated' if order.id else 'created'}"
+                    self.loc.log_or_console(True, "I",None, order_stored)
                 else:
-                    print(" No order ID provided or order creation failed. Check input data.")
+                    self.loc.log_or_console(True, "I", None,
+                                            " No order ID provided or order creation failed. Check input data.")
             except db_errors as e:
-                print(f"    Error either getting or storing the Order record: {str(e)}")
+                self.loc.log_or_console(True, "I",
+                                        "    Error either getting or storing the Order record",
+                                        str(e))
                 db.session.rollback()
                 return None
 
@@ -1151,10 +1152,6 @@ class TradeManager:
         #  Friday 5 PM ET (excluding observed holidays),
         #  with a 1-hour break each day from 5 PM – 6 PM ET
 
-        # TODO: Need to adjust check for contract expires and switch a few days prior
-        #  to the closing of the contract or we just let it
-        #  go and reopen in the next contract trading session
-
         # Get the futures contract from Coinbase API
         list_future_products = self.cb_adv_api.list_products("FUTURE")
         self.cb_adv_api.store_btc_futures_products(list_future_products)
@@ -1416,7 +1413,8 @@ class TradeManager:
             # NOTE: We should only get one if we're only trading one future (BTC)
             with (self.flask_app.app_context()):  # Push an application context
                 try:
-                    # REVIEW: position doesn't have the most accurate data we need
+                    # NOTE: position doesn't have the all most accurate data we need, so
+                    #  we uses the order to help supplement what we need
                     positions = FuturePosition.query.all()
                     for position in positions:
                         self.tracking_current_position_profit_loss(position, cur_position_order, next_month)
@@ -1537,25 +1535,29 @@ class TradeManager:
                     size = "1"
                     leverage = "3"
                     order_type = "limit_limit_gtc"
-                    print(f"    >>> Trade side:{trade_side} Order type:{order_type} "
+                    order_msg = (f"    >>> Trade side:{trade_side} Order type:{order_type} "
                           f"Limit Price:{limit_price} Size:{size} Leverage:{leverage}")
+                    self.loc.log_or_console(True, "I",None, order_msg)
 
                     # NOTE: If we place a limit order and it doesn't go through, we need to control
                     #   this from placing more orders. Only one should be allowed until it goes through.
                     #   We should cancel the order, then place again. We set a bot_note to track this
+
                     current_open_position = self.cb_adv_api.get_current_take_profit_order_from_db(order_status="OPEN",
                                                                                                   side=trade_side,
                                                                                                   bot_note="MAIN")
 
                     # NOTE: If this loops back through and has not been bought or sold (a position),
                     #   then cancel and try again at a better average bid/ask price.
+
                     if current_open_position is not None:
                         current_open_position_order_id = [current_open_position.order_id]
                         print("MAIN current_open_position_order_id:", current_open_position_order_id)
 
                         self.cb_adv_api.cancel_order(order_ids=current_open_position_order_id)
 
-                    # TODO: Cancel all OPEN orders
+                    # NOTE: Get then close all open orders
+
                     remaining_open_orders = self.cb_adv_api.list_orders(product_id=product_id,
                                                                         order_status="OPEN")
                     # print("remaining_open_orders:", remaining_open_orders)
@@ -1568,11 +1570,23 @@ class TradeManager:
                             order_ids.append(order['order_id'])
                         print("remaining_open_orders order_ids:", order_ids)
 
-                        # NOTE: Close all open orders
-                        self.cb_adv_api.cancel_order(order_ids=order_ids)
+                        # Pass the order_id as a list. Can place multiple order ids if necessary, but not in this case
+                        cancelled_order = self.cb_adv_api.cancel_order(order_ids=order_ids)
+                        self.loc.log_or_console(True, "I", "cancelled_order", cancelled_order)
 
-                    # TODO: May need to update Future Order record first
+                        field_values = {
+                            "bot_active": 0,
+                            "order_status": "CANCELLED"
+                        }
 
+                        for order in remaining_open_orders['orders']:
+                            # Update order so we don't the system doesn't try to use it for future orders
+                            updated_cancelled_order = self.cb_adv_api.update_order_fields(
+                                client_order_id=order.client_order_id,
+                                field_values=field_values)
+                            self.loc.log_or_console(True, "I", "updated_cancelled_order", updated_cancelled_order)
+
+                    # Create a new MAIN order
                     order_created = self.cb_adv_api.create_order(side=trade_side,
                                                                  product_id=product_id,
                                                                  size=size,
@@ -1582,6 +1596,7 @@ class TradeManager:
                                                                  bot_note="MAIN")
                     print("MAIN order_created:", order_created)
 
+                    # Create the DCA ladder orders
                     self.ladder_orders(side=trade_side,
                                        product_id=product_id,
                                        bid_price=bid_price,
@@ -1602,8 +1617,6 @@ class TradeManager:
 
     def tracking_current_position_profit_loss(self, position, order, next_month):
         self.loc.log_or_console(True, "D", None, ":tracking_current_position_profit_loss:")
-
-        # TODO: Need to get Client Order IDs for all open contracts in order to close them directly
 
         # Only run if we have ongoing positions
         if position:
@@ -1713,14 +1726,6 @@ class TradeManager:
             elif side == "SHORT":  # SELL / SHORT
                 take_profit_side = "BUY"
             # print(" take_profit_side:", take_profit_side)
-
-            # REVIEW: We need to be careful with this loose query. We should start tracking
-            #  bot order versus manual orders in the database
-
-            # TODO: Track bot orders in the database with "bot_order" and "manual_ui" orders
-
-            # TODO: Do we call the list_orders to get them (or use the scheduler), then
-            #   select the first record found? We need to limit how many orders are created.
 
             # Now, get the Future Order from the DB so we have more accurate data
             take_profit_order = self.cb_adv_api.get_current_take_profit_order_from_db(
@@ -1850,6 +1855,7 @@ class TradeManager:
                             "bot_active": 0,
                             "order_status": "CANCELLED"
                         }
+                        # Update order so we don't the system doesn't try to use it for future orders
                         updated_cancelled_order = self.cb_adv_api.update_order_fields(client_order_id=tp_client_order_id,
                                                                                       field_values=field_values)
                         self.loc.log_or_console(True, "I", "updated_cancelled_order", updated_cancelled_order)
@@ -1874,9 +1880,6 @@ class TradeManager:
 
 if __name__ == "__main__":
     print(__name__)
-
-    # TODO: Need to track orders OPEN and FILLED (keep updated)
-    # TODO: Do we need the websocket to watch prices?
 
     ############################
     # def on_message(msg):

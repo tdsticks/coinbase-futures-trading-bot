@@ -13,16 +13,12 @@ import pytz
 import os
 import re
 
-
-# REVIEW: Profit / Loss calculation is off again - investigate
-#   This issue seems like another bug with Coinbase API's positions avg_entry_price
-#   Need to pull my data from the list_orders for better accuracy
-
+# TODO: Integrate the bot_config values
 # TODO: Explore finding a better time to open order within the Weekly / Daily Signal
 #   Might be using the 15 min signal to find best opportunity
 # TODO: Do we also create a trailing take profit feature?
-# TODO: Need to update all CLOSED orders bot_active = 0
-# TODO: Add to queries for OPEN orders to use bot_active = 1
+# TODO: Do we need the websocket to watch prices?
+
 
 # set configuration values
 class Config:
@@ -64,8 +60,8 @@ class Config:
 #       then we'd be in a new contract month and riding out the dip, it would have been a great place
 #       to be. We could then close out at that Daily short signal right before end the of Oct on the 27th.
 #       That would have been roughly 25% on that trade (or multiple trades if you DCA on the dip).
-#       Note: We need to track and trade within the monthly contracts to avoid forceful closing them on Coinbase Futures.
-#   Scenario Two:
+#       We need to track and trade within the monthly contracts to avoid forceful closing them on
+#       Coinbase Futures.
 #
 
 

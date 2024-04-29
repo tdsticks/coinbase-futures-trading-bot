@@ -13,11 +13,15 @@ import pytz
 import os
 import re
 
+# REVIEW: Profit / Loss calculation is off again - investigate
+#   This issue seems like another bug with Coinbase API's positions avg_entry_price
+#   Need to pull my data from the list_orders for better accuracy
 
 # TODO: Explore finding a better time to open order within the Weekly / Daily Signal
 #   Might be using the 15 min signal to find best opportunity
-# TODO: If our position closes in our favor, then we need to close all open orders
-
+# TODO: Do we also create a trailing take profit feature?
+# TODO: Need to update all CLOSED orders bot_active = 0
+# TODO: Add to queries for OPEN orders to use bot_active = 1
 
 # set configuration values
 class Config:
@@ -85,28 +89,41 @@ def create_app():
     if not os.path.exists(log_directory):
         os.makedirs(log_directory)
 
-    handler = TimedRotatingFileHandler(
+    # Log file handler with timed rotating files
+    file_handler = TimedRotatingFileHandler(
         filename=os.path.join(log_directory, 'flask_app.log'),
         when='H',
         interval=4,
         backupCount=180  # currently keeps 30 days of logs (120 rotations * 4 hours)
     )
-    handler.suffix = "%Y-%m-%d %H.%M.%S"  # Date Time format
-    handler.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$")  # Ensures only files with dates are matched
+    file_handler.suffix = "%Y-%m-%d %H.%M.%S"  # Date Time format
+    file_handler.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$")  # Ensures on ly files with dates are matched
 
-    handler.setFormatter(logging.Formatter(
-        '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
-    ))
+    formatter = logging.Formatter(
+        '[%(asctime)s] %(levelname)s in [%(filename)s:%(lineno)d] %(module)s %(message)s'
+    )
+
+    # Set the formatter to the file logging
+    file_handler.setFormatter(formatter)
+
+    # Console Handler
+    console_handler = logging.StreamHandler()
+
+    # Set the formatter to the console
+    console_handler.setFormatter(formatter)
 
     if flask_app.config['DEBUG']:
         # Set the logger level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        handler.setLevel(logging.DEBUG)
-        flask_app.logger.addHandler(handler)
         flask_app.logger.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)
     else:
-        handler.setLevel(logging.WARNING)
-        flask_app.logger.addHandler(handler)
         flask_app.logger.setLevel(logging.WARNING)
+        file_handler.setLevel(logging.WARNING)
+        console_handler.setLevel(logging.WARNING)
+
+    flask_app.logger.addHandler(file_handler) # Add the file handler
+    flask_app.logger.addHandler(console_handler)  # Add the console handler
 
     # flask_app.logger.debug('----------------- restarting Flask app -----------------')
     flask_app.logger.info('----------------- restarting Flask app -----------------')
@@ -171,7 +188,12 @@ def webhook():
         # 'message': data.get('message')  # Use .get for optional fields
     }
 
-    tm.write_db_signal(signal_data)
+    now = datetime.now(pytz.utc)
+    # print("Is trading time?", tm.is_trading_time(now))
+
+    # Check if the market is open or not
+    if tm.is_trading_time(now):
+        tm.write_db_signal(signal_data)
 
     # Respond back to the webhook sender to acknowledge receipt
     return jsonify({"status": "success", "message": "Signal received"}), 200
@@ -238,54 +260,83 @@ def check_trading_conditions_job():
         tm.check_trading_conditions()
 
 
-@scheduler.task('interval', id='do_job_4', seconds=120, misfire_grace_time=900)
+@scheduler.task('interval', id='do_job_4', seconds=35, misfire_grace_time=900)
 def list_and_store_future_orders_job():
-    # print('\n:list_and_store_future_orders_job:')
     loc.log_or_console(True, "D", None, msg1=":list_and_store_future_orders_job:")
 
-    #
     # Check if the market is open or not
     now = datetime.now(pytz.utc)
-    # print("Is trading time?", tm.is_trading_time(now))
+
+    # BUG: Was getting an error from this order_status: UNKNOWN_ORDER_STATUS
+
+    all_order_status = ["OPEN", "FILLED", "CANCELLED", "EXPIRED", "FAILED"]
+    # all_order_status = ["OPEN"]
+
+    def run_all_list_orders(statuses, month, product_id):
+        loc.log_or_console(True, "D", None, None)
+        month_msg = f"Month: {month}"
+        product_id_msg = f"Product: {product_id}"
+        loc.log_or_console(True, "D", month_msg, product_id_msg)
+        for status in statuses:
+            orders = cbapi.list_orders(product_id=product_id, order_status=status)
+            loc.log_or_console(True, "D", status,"Cnt", len(orders['orders']))
+            if len(orders['orders']) > 0:
+                cbapi.store_or_update_orders_from_api(orders)
 
     if tm.is_trading_time(now):
 
+        curr_month = cbapi.get_current_short_month_uppercase()
         next_month = cbapi.get_next_short_month_uppercase()
         # loc.log_or_console(True, "I","next_month", next_month)
 
-        curret_future_product = cbapi.get_relevant_future_from_db()
+        current_future_product = cbapi.get_relevant_future_from_db()
         next_months_future_product = cbapi.get_relevant_future_from_db(month_override=next_month)
-        loc.log_or_console(True, "I", "curret_future_product", msg1=curret_future_product.product_id)
-        loc.log_or_console(True, "I", "next_months_future_product", msg1=next_months_future_product.product_id)
+        curr_product_id = current_future_product.product_id
+        next_product_id = next_months_future_product.product_id
 
-        # ORDER TYPES:
-        # [OPEN, FILLED, CANCELLED, EXPIRED, FAILED, UNKNOWN_ORDER_STATUS]
+        run_all_list_orders(all_order_status, curr_month, curr_product_id)
+        run_all_list_orders(all_order_status, next_month, next_product_id)
 
         # List Orders
+        # ORDER TYPES:
+        # [OPEN, FILLED, CANCELLED, EXPIRED, FAILED, UNKNOWN_ORDER_STATUS]
         # all_orders = cbapi.list_orders(product_id=future_product.product_id, order_status=None)
         ## print("all_orders count:", len(all_orders['orders']))
         # loc.log_or_console(True, msg1="all_orders:", msg2=len(all_orders['orders']))
         #
         # if len(all_orders['orders']) > 0:
-        #     cbapi.store_or_update_orders(all_orders)
+        #     cbapi.store_or_update_orders_from_api(all_orders)
 
-        # REVIEW: Was getting an error from this order_status: UNKNOWN_ORDER_STATUS
 
-        all_order_status = ["OPEN", "FILLED", "CANCELLED", "EXPIRED", "FAILED"]
-        # all_order_status = ["OPEN"]
-        for status in all_order_status:
-            orders = cbapi.list_orders(product_id=curret_future_product.product_id, order_status=status)
-            loc.log_or_console(True, "D", status, "orders cnt:", len(orders['orders']))
-
-            if len(orders['orders']) > 0:
-                cbapi.store_or_update_orders(orders)
-
-        for status in all_order_status:
-            orders = cbapi.list_orders(product_id=next_months_future_product.product_id, order_status=status)
-            loc.log_or_console(True, "D", status, "orders cnt:", len(orders['orders']))
-
-            if len(orders['orders']) > 0:
-                cbapi.store_or_update_orders(orders)
+# @scheduler.task('interval', id='do_job_6', seconds=30, misfire_grace_time=900)
+# def test_ladder_orders_job():
+#     print('\n:test_ladder_orders_job:')
+#
+#     next_months_product_id, next_month = tm.check_for_contract_expires()
+#     print("next_months_product_id:", next_months_product_id)
+#     print("next_month:", next_month)
+#
+#     # Get this months current product
+#     relevant_future_product = cbapi.get_relevant_future_from_db(month_override=next_month)
+#     print(" relevant_future_product:", relevant_future_product.product_id)
+#
+#     # Get Current Bid Ask Prices
+#     cur_future_bid_ask_price = cbapi.get_current_bid_ask_prices(
+#         relevant_future_product.product_id)
+#     cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+#     cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+#     print(f" Prd: {relevant_future_product.product_id} - "
+#           f"Current Futures: bid: ${cur_future_bid_price} "
+#           f"ask: ${cur_future_ask_price}")
+#
+#     # side = "BUY"
+#     side = "SELL"
+#     print(" side:", side)
+#
+#     tm.ladder_orders(side=side,
+#                      product_id=relevant_future_product.product_id,
+#                      bid_price=cur_future_bid_price,
+#                      ask_price=cur_future_ask_price)
 
 
 scheduler.init_app(app)

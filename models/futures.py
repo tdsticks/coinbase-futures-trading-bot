@@ -56,8 +56,13 @@ class FuturesOrder(db.Model):
     product_id = db.Column(db.String(128), nullable=True)
     product_type = db.Column(db.String(128), nullable=True)
     order_type = db.Column(db.String(128), nullable=True)
-    time_in_force = db.Column(db.String(128), nullable=True)
+    creation_origin = db.Column(db.String(128), default="coinbase_ui", nullable=True)
+
+    # Bot notes: MAIN, DCA1, DCA3, DCA3, TAKE_PROFIT
+    bot_note = db.Column(db.String(128), nullable=True)
+    bot_active = db.Column(db.Boolean, default=False, nullable=True)
     order_status = db.Column(db.String(128), nullable=True)
+    time_in_force = db.Column(db.String(128), nullable=True)
     order_placement_source = db.Column(db.String(128), nullable=True)
     side = db.Column(db.String(32), nullable=True)
     limit_price = db.Column(db.String(128), nullable=True)
@@ -89,7 +94,6 @@ class FuturesOrder(db.Model):
     error_message = db.Column(db.String(255), nullable=True)
     error_details = db.Column(db.String(255), nullable=True)
     post_only = db.Column(db.Boolean, nullable=True)
-
     end_time = db.Column(db.DateTime, nullable=True)
     trigger_status = db.Column(db.String(128), nullable=True)
     created_time = db.Column(db.DateTime, nullable=True)

@@ -372,8 +372,8 @@ class CoinbaseAdvAPI:
         return next_short_month
 
     def get_relevant_future_from_db(self, month_override=None):
-        self.loc.log_or_console(True, "D", None,
-                                ":get_relevant_future_from_db:")
+        # self.loc.log_or_console(True, "D", None,
+        #                         ":get_relevant_future_from_db:")
 
         # Find this months future product
         with self.flask_app.app_context():
@@ -396,7 +396,7 @@ class CoinbaseAdvAPI:
             if future_contract:
                 # print("\nFound future entry:", future_entry)
                 self.loc.log_or_console(True, "I",
-                                        "   Found future contract", future_contract.product_id)
+                                        "       Found future contract", future_contract.product_id)
                 return future_contract
             else:
                 # print("\n   No future entry found for this month.")
@@ -485,9 +485,9 @@ class CoinbaseAdvAPI:
         # Round the price to the nearest increment
         return str(round(price / increment) * increment)
 
-    def create_order(self, side: str, product_id: str, size: str,
+    def create_order(self, side: str, product_id: str, size: str, bot_note: str,
                      limit_price: str = None, leverage: str = "3",
-                     order_type: str = 'limit_limit_gtc', bot_note: str = ""):
+                     order_type: str = 'limit_limit_gtc'):
         self.loc.log_or_console(True, "D", "Time create_order")
         # print(f"    order_type: {order_type} "
         #       f"side: {side}, "
@@ -622,17 +622,18 @@ class CoinbaseAdvAPI:
         # pp(order_created)
 
         if order_created.get('success'):
-            print("Order successfully created:")
-            pp(order_created.get('success_response'))
+            self.loc.log_or_console(True, "I", "Order successfully created")
+            self.loc.log_or_console(True, "D", None, order_created.get('success_response'))
 
         if order_created.get('failure_reason'):
-            print("Order creation failed:")
-            print("Failure Reason:", order_created.get('failure_reason'))
+            self.loc.log_or_console(True, "I", "Order creation failed")
+            self.loc.log_or_console(True, "D", None, order_created.get('failure_reason'))
+
             if order_created.get('error_response'):
-                print("Error Message:", order_created.get('error_response').get('message'))
-                print("Error Details:", order_created.get('error_response').get('error_details'))
+                self.loc.log_or_console(True, "E", "Error Message", order_created.get('error_response').get('message'))
+                self.loc.log_or_console(True, "E", "Error Details", order_created.get('error_response').get('error_details'))
             else:
-                print("No detailed error message provided.")
+                self.loc.log_or_console(True, "D", "No detailed error message provided.")
 
         post_order_for_storing = {
             "order_id": order_created['order_id'],
@@ -721,7 +722,7 @@ class CoinbaseAdvAPI:
                         FuturesOrder.side == side
                     )
                 ).first()
-                # print("open_futures:", open_futures)
+                # self.loc.log_or_console(True, "I", "open_futures", open_futures)
 
                 return open_futures
             except Exception as e:
@@ -730,15 +731,16 @@ class CoinbaseAdvAPI:
         return open_futures
 
     def cancel_order(self, order_ids: list):
-        # print("\n:cancel_order:")
-        # print("order_ids:", order_ids, type(order_ids))
+        self.loc.log_or_console(True, "D", "cancel_order")
+        # self.loc.log_or_console(True, "I", "    order_ids", order_ids)
 
         cancelled_order = None
         if len(order_ids) > 0:
             cancelled_order = self.client.cancel_orders(order_ids=order_ids)
-            # print(" cancelled_order:", cancelled_order)
+            # self.loc.log_or_console(True, "I", "cancelled_order", cancelled_order)
         else:
             print("No order ids to cancel")
+            self.loc.log_or_console(True, "W", " !!! No order ids to cancel")
         return cancelled_order
 
     def edit_order(self, order_id, size=None, price=None):
@@ -818,6 +820,7 @@ class CoinbaseAdvAPI:
                         order.order_type = order_data["order_type"]
                         order.creation_origin = order_data["creation_origin"]
                         order.bot_note = order_data['bot_note']
+                        order.bot_active = order_data['bot_active']
                         order.side = order_data['side']
                         order.quote_size = order_data["quote_size"]
                         order.base_size = order_data["base_size"]
@@ -837,6 +840,7 @@ class CoinbaseAdvAPI:
                             order_type=order_data["order_type"],
                             creation_origin=order_data["creation_origin"],
                             bot_note=order_data["bot_note"],
+                            bot_active=order_data['bot_active'],
                             side=order_data["side"],
                             quote_size=order_data["quote_size"],
                             base_size=order_data["base_size"],
@@ -865,7 +869,7 @@ class CoinbaseAdvAPI:
                 return None
 
     def store_or_update_orders_from_api(self, orders_data):
-        self.loc.log_or_console(True, "D", None, ":store_or_update_orders_from_api:")
+        # self.loc.log_or_console(True, "D", None, ":store_or_update_orders_from_api:")
 
         for order in orders_data['orders']:
             # pp(order)
@@ -948,39 +952,41 @@ class CoinbaseAdvAPI:
 
     def update_order_fields(self, client_order_id: str, field_values: dict = None):
         self.loc.log_or_console(True, "D", None, ":update_order_fields:")
-        self.loc.log_or_console(True, "I", "field_values", field_values)
+        # self.loc.log_or_console(True, "I", "field_values", field_values)
 
         with self.flask_app.app_context():  # Push an application context
             try:
                 if client_order_id:
                     # Query for an existing order
                     order = FuturesOrder.query.filter_by(client_order_id=client_order_id).first()
-                    self.loc.log_or_console(True, "I", "found order", order)
+                    self.loc.log_or_console(True, "I", "    found order", order)
 
-                    if order:
+                    if order and field_values:
                         # Order exists, update its details
-                        for fv in field_values:
-                            field = fv
-                            value = field_values[field]
+                        for field, value in field_values.items():
+                            # self.loc.log_or_console(True, "I", "field", field)
+                            # self.loc.log_or_console(True, "I", "value", value)
 
-                            # order.field = value
+                            # Set the order field with the value
+                            # Dynamically set the attribute based on field name
+                            setattr(order, field, value)
 
-                    # Commit changes or new entry to the database
-                    db.session.commit()
+                        # Commit changes or new entry to the database
+                        db.session.commit()
+                        self.loc.log_or_console(True, "I", "Order Client ID",
+                                                client_order_id, "  field values updated")
 
-                    # TODO: Should switch to logging for these
-
-                    self.loc.log_or_console(True, "I", "Order Client ID",
-                                            client_order_id, "field values updated")
+                        return "    Successfully updated order record"
                 else:
                     self.loc.log_or_console(True, "W", None,
                                             "No Client Order ID provided or order creation failed. Check input data.")
+                    return f"   No Client Order ID provided client_order_id: {client_order_id}"
             except db_errors as e:
                 self.loc.log_or_console(True, "E",
                                         "    Error either getting or storing the Order record",
                                         str(e))
                 db.session.rollback()
-                return None
+                return "    update_order_fields - Database Error"
 
     def close_position(self, client_order_id, product_id, contract_size):
         self.loc.log_or_console(True, "I", None, ":close_position:")
@@ -1401,7 +1407,7 @@ class TradeManager:
             # Now, get the Future Order from the DB so we have more accurate data
             cur_position_order = self.cb_adv_api.get_current_take_profit_order_from_db(
                 order_status="FILLED", side=side, bot_note="MAIN")
-            self.loc.log_or_console(True, "I", "cur_position_order", cur_position_order)
+            # self.loc.log_or_console(True, "I", "cur_position_order", cur_position_order)
 
             # Clear and store the active future position
             self.cb_adv_api.store_future_positions(future_positions)
@@ -1614,235 +1620,256 @@ class TradeManager:
             product_contract_size = relevant_future_product.contract_size
             # self.loc.log_or_console(True, "I", "  product_contract_size:", product_contract_size)
 
-            # Get the average filled price from the Future Order
-            avg_filled_price = round(int(order.average_filled_price), 2)
-            self.loc.log_or_console(True, "I", "  avg_filled_price", avg_filled_price)
+            if order is not None:
+                # print("  Profit / Loss: order", order)
+                # print("  Profit / Loss: order.average_filled_price", order.average_filled_price)
 
-            # Get the current price from the Future Position
-            current_price = round(int(position.current_price), 2)
-            self.loc.log_or_console(True, "I", "  current_price", current_price)
+                # Get the average filled price from the Future Order
+                avg_filled_price = round(int(order.average_filled_price), 2)
+                self.loc.log_or_console(True, "I", "  avg_filled_price", avg_filled_price)
 
-            number_of_contracts = position.number_of_contracts
-            self.loc.log_or_console(True, "I", "  number_of_contracts", number_of_contracts)
+                # Get the current price from the Future Position
+                current_price = round(int(position.current_price), 2)
+                self.loc.log_or_console(True, "I", "  current_price", current_price)
 
-            # Calculate total cost and current value per contract
-            total_initial_cost = avg_filled_price * number_of_contracts * product_contract_size
-            total_current_value = current_price * number_of_contracts * product_contract_size
-            # self.loc.log_or_console(True, "I", "  total_initial_cost", total_initial_cost)
-            # self.loc.log_or_console(True, "I", "  total_current_value", total_current_value)
+                number_of_contracts = position.number_of_contracts
+                self.loc.log_or_console(True, "I", "  number_of_contracts", number_of_contracts)
 
-            # Calculate profit or loss for all contracts
-            # NOTE: We need to factor in what side of the market: long or short
-            calc_profit_or_loss = 0
-            if position.side.lower() == 'long':  # Assuming 'buy' denotes a long position
-                calc_profit_or_loss = round(total_current_value - total_initial_cost, 4)
-            elif position.side.lower() == 'short':  # Assuming 'sell' denotes a short position
-                calc_profit_or_loss = round(total_initial_cost - total_current_value, 4)
-            # self.loc.log_or_console(True, "I", "  calc_profit_or_loss", calc_profit_or_loss)
+                # Calculate total cost and current value per contract
+                total_initial_cost = avg_filled_price * number_of_contracts * product_contract_size
+                total_current_value = current_price * number_of_contracts * product_contract_size
+                # self.loc.log_or_console(True, "I", "  total_initial_cost", total_initial_cost)
+                # self.loc.log_or_console(True, "I", "  total_current_value", total_current_value)
 
-            if total_initial_cost != 0:  # Prevent division by zero
-                calc_percentage = round((calc_profit_or_loss / total_initial_cost) * 100, 4)
+                # Calculate profit or loss for all contracts
+                # NOTE: We need to factor in what side of the market: long or short
+                calc_profit_or_loss = 0
+                if position.side.lower() == 'long':  # Assuming 'buy' denotes a long position
+                    calc_profit_or_loss = round(total_current_value - total_initial_cost, 4)
+                elif position.side.lower() == 'short':  # Assuming 'sell' denotes a short position
+                    calc_profit_or_loss = round(total_initial_cost - total_current_value, 4)
+                # self.loc.log_or_console(True, "I", "  calc_profit_or_loss", calc_profit_or_loss)
+
+                if total_initial_cost != 0:  # Prevent division by zero
+                    calc_percentage = round((calc_profit_or_loss / total_initial_cost) * 100, 4)
+                else:
+                    calc_percentage = 0
+                # self.loc.log_or_console(True, "I", "  calc_percentage:", calc_percentage)
+
+                # print("Contract Expires on", future_position['position']['expiration_time'])
+                # print(" Contract Expires on", position.expiration_time)
+
+                self.loc.log_or_console(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
+                self.loc.log_or_console(True, "I", None, ">>> Profit / Loss <<<")
+                self.loc.log_or_console(True, "I", "Product Id", product_id)
+                self.loc.log_or_console(True, "I", "Position Side", side)
+                self.loc.log_or_console(True, "I", "Avg Entry Price $", avg_filled_price)
+                self.loc.log_or_console(True, "I", "Current Price $", current_price)
+                self.loc.log_or_console(True, "I", "# of Contracts", number_of_contracts)
+                if calc_percentage >= 2:
+                    self.loc.log_or_console(True, "I", "Take profit at 2% or higher %", calc_percentage)
+                    self.loc.log_or_console(True, "I", "Good Profit $", calc_profit_or_loss)
+                elif 2 > calc_percentage > 0.5:
+                    self.loc.log_or_console(True, "I", "Not ready to take profit %", calc_percentage)
+                    self.loc.log_or_console(True, "I", "Ok Profit $", calc_profit_or_loss)
+                elif 0.5 >= calc_percentage >= 0:
+                    self.loc.log_or_console(True, "I", "Neutral %", calc_percentage)
+                    self.loc.log_or_console(True, "I", "Not enough profit $", calc_profit_or_loss)
+                elif calc_percentage < 0:
+                    self.loc.log_or_console(True, "I", "Trade negative %", calc_percentage)
+                    self.loc.log_or_console(True, "I", "No profit, loss of $", calc_profit_or_loss)
+                self.loc.log_or_console(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
             else:
-                calc_percentage = 0
-            # self.loc.log_or_console(True, "I", "  calc_percentage:", calc_percentage)
-
-            # print("Contract Expires on", future_position['position']['expiration_time'])
-            # print(" Contract Expires on", position.expiration_time)
-
-            self.loc.log_or_console(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
-            self.loc.log_or_console(True, "I", None, ">>> Profit / Loss <<<")
-            self.loc.log_or_console(True, "I", "Product Id", product_id)
-            self.loc.log_or_console(True, "I", "Position Side", side)
-            self.loc.log_or_console(True, "I", "Avg Entry Price $", avg_filled_price)
-            self.loc.log_or_console(True, "I", "Current Price $", current_price)
-            self.loc.log_or_console(True, "I", "# of Contracts", number_of_contracts)
-            if calc_percentage >= 2:
-                self.loc.log_or_console(True, "I", "Take profit at 2% or higher %", calc_percentage)
-                self.loc.log_or_console(True, "I", "Good Profit $", calc_profit_or_loss)
-            elif 2 > calc_percentage > 0.5:
-                self.loc.log_or_console(True, "I", "Not ready to take profit %", calc_percentage)
-                self.loc.log_or_console(True, "I", "Ok Profit $", calc_profit_or_loss)
-            elif 0.5 >= calc_percentage >= 0:
-                self.loc.log_or_console(True, "I", "Neutral %", calc_percentage)
-                self.loc.log_or_console(True, "I", "Not enough profit $", calc_profit_or_loss)
-            elif calc_percentage < 0:
-                self.loc.log_or_console(True, "I", "Trade negative %", calc_percentage)
-                self.loc.log_or_console(True, "I", "No profit, loss of $", calc_profit_or_loss)
-            self.loc.log_or_console(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
-
+                self.loc.log_or_console(True, "W", "No open order", order)
         else:
             self.loc.log_or_console(True, "W", "No open positions", position)
 
     def track_take_profit_order(self, position, order):
-        # print("\n:track_take_profit_order:")
         self.loc.log_or_console(True, "D", None, ":track_take_profit_order:")
 
-        # TODO: Figure out the take profit, especially if we have more orders added
-        #   The average price may be key here, plus the percentage we want to profit from
-        #   or a opposing signal, or the end of the contract date
-
-        # TODO: This is where we place an opposing order, so if we're longing the market,
+        # NOTE: This is where we place an opposing order, so if we're longing the market,
         #   We need to place a Sell order at our take profit.
         #   As well, if we're shorting the market, we need to place a Buy order to take profit
 
-        # TODO: Need to track the current open position (which side)
-        #   and also if we already have a take profit order open, if we, then we edit and adjust as
-        #   need based on the market and the timing of the scheduler
+        # REVIEW: Figure out the take profit, especially if we have more orders added
+        #   The average price may be key here, plus the percentage we want to profit from
+        #   or a opposing signal, or the end of the contract date
 
-        # TODO: When we end up closing the trade, we need to close all the other orders still open
+        # print("position:", position)
+        # print("order:", order)
 
-        product_id = position.product_id
-        take_profit_side = ""
-        side = position.side
-        # print(" side:", side)
+        # Only run if we have ongoing positions and order
+        if position and order:
 
-        # If we're LONG, then we need to place a profitable BUY order
-        if side == "LONG":  # BUY / LONG
-            take_profit_side = "SELL"
-        # If we're SHORT, then we need to place a profitable SELL order
-        elif side == "SHORT":  # SELL / SHORT
-            take_profit_side = "BUY"
-        # print(" take_profit_side:", take_profit_side)
+            product_id = position.product_id
+            take_profit_side = ""
+            side = position.side
+            # print(" side:", side)
 
-        # REVIEW: We need to be careful with this loose query. We should start tracking
-        #  bot order versus manual orders in the database
+            # If we're LONG, then we need to place a profitable BUY order
+            if side == "LONG":  # BUY / LONG
+                take_profit_side = "SELL"
+            # If we're SHORT, then we need to place a profitable SELL order
+            elif side == "SHORT":  # SELL / SHORT
+                take_profit_side = "BUY"
+            # print(" take_profit_side:", take_profit_side)
 
-        # TODO: Track bot orders in the database with "bot_order" and "manual_ui" orders
+            # REVIEW: We need to be careful with this loose query. We should start tracking
+            #  bot order versus manual orders in the database
 
-        # TODO: Do we call the list_orders to get them (or use the scheduler), then
-        #   select the first record found? We need to limit how many orders are created.
+            # TODO: Track bot orders in the database with "bot_order" and "manual_ui" orders
 
-        # Now, get the Future Order from the DB so we have more accurate data
-        take_profit_order = self.cb_adv_api.get_current_take_profit_order_from_db(
-            order_status="OPEN", side=take_profit_side, bot_note="TAKE_PROFIT")
-        # print("take_profit_order exists 1:", take_profit_order)
+            # TODO: Do we call the list_orders to get them (or use the scheduler), then
+            #   select the first record found? We need to limit how many orders are created.
 
-        existing_take_profit_order = False
-        # take_profit_order = {}
+            # Now, get the Future Order from the DB so we have more accurate data
+            take_profit_order = self.cb_adv_api.get_current_take_profit_order_from_db(
+                order_status="OPEN", side=take_profit_side, bot_note="TAKE_PROFIT")
+            # self.loc.log_or_console(True, "I", "take_profit_order exists 1", take_profit_order)
 
-        # Now see if we have a take profit order already open
-        if take_profit_order is not None:
-            # print("take_profit_order exists 2:", take_profit_order)
-            existing_take_profit_order = True
-        else:
-            print("No take_profit_order:", take_profit_order)
-
-        # TODO: Need to test if the average price changes based on more positions (contracts)
-        #   This may need to be adjusted back to using the Position record vs the Order record
-        #   if more contracts are bought
-
-        avg_filled_price = round(int(order.average_filled_price))
-        # self.loc.log_or_console(True, "I", "avg_filled_price", avg_filled_price)
-
-        current_price = position.current_price
-        # print(" current_price:", current_price)
-
-        number_of_contracts = position.number_of_contracts
-        # print(" number_of_contracts:", number_of_contracts)
-
-        take_profit_percentage = 0.015
-        # print(f" take_profit_percentage: %{take_profit_percentage * 100}")
-
-        #
-        # Calculate the take profit price (Long or Short)
-        #
-        take_profit_offset_price = int(float(avg_filled_price) * take_profit_percentage)
-        # print(" take_profit_offset_price:", take_profit_offset_price)
-
-        take_profit_price = ""
-
-        # If we're LONG, then we need to place a profitable SELL order
-        if side == "LONG":  # BUY / LONG
-            take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
-                int(avg_filled_price) + take_profit_offset_price)
-            self.loc.log_or_console(True, "I", "SELL Short take_profit_price: $", take_profit_price)
-
-        # If we're SHORT, then we need to place a profitable BUY order
-        elif side == "SHORT":  # SELL / SHORT
-            take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
-                int(avg_filled_price) - take_profit_offset_price)
-            self.loc.log_or_console(True, "I", "BUY Long take_profit_price: $", take_profit_price)
-
-        # leverage = "3"
-        order_type = "limit_limit_gtc"
-
-        # If we don't have an existing take profit order, create one
-        if not existing_take_profit_order:
-            # print("\n >>> Create new take_profit_order")
-            self.loc.log_or_console(True, "I", None, ">>> Create new take_profit_order")
-
-            # Take Profit Order
-            order_created = self.cb_adv_api.create_order(side=take_profit_side,
-                                                         product_id=product_id,
-                                                         size=number_of_contracts,
-                                                         limit_price=take_profit_price,
-                                                         leverage='',
-                                                         order_type=order_type,
-                                                         bot_note="TAKE_PROFIT")
-            print("TAKE_PROFIT order_created!")
-            # print("TAKE_PROFIT order_created:", order_created)
-
-        else:  # Otherwise, let's edit and update the order based on the market and position(s)
-            # print("\n >>> Edit Existing Take Profit Order")
-            self.loc.log_or_console(True, "I", None, ">>> Edit Existing Take Profit Order")
-
-            # pp(take_profit_order)
-            order_id = take_profit_order.order_id
-            client_order_id = take_profit_order.client_order_id
-            self.loc.log_or_console(True, "I", "order_id", order_id)
-            self.loc.log_or_console(True, "I", "client_order_id", client_order_id)
-
-            # For limit GTC orders only
-            size = take_profit_order.base_size
-            self.loc.log_or_console(True, "I", "take_profit_order size", size)
-            self.loc.log_or_console(True, "I", "number_of_contracts", number_of_contracts)
-            self.loc.log_or_console(True, "I", "take_profit_price", take_profit_price)
-
-            # See if we need to update the size based on the existing number of
-            # contracts in the position
-            if int(number_of_contracts) > int(size):
-                new_size = number_of_contracts
-                self.loc.log_or_console(True, "W", "take_profit_order new_size", new_size)
+            # Now see if we have a take profit order already open
+            if take_profit_order is not None:
+                # self.loc.log_or_console(True, "I", "take_profit_order exists 2", take_profit_order)
+                existing_take_profit_order = True
             else:
-                new_size = size
-            # print(" take_profit_order new_size:", new_size)
+                existing_take_profit_order = False
+                self.loc.log_or_console(True, "W", "No take_profit_order", take_profit_order)
 
-            # take_profit_price: 63720
-            # take_profit_price = "62935"
-            # new_size = str(1)
+            # TODO: Need to test if the average price changes based on more positions (contracts)
+            #   This may need to be adjusted back to using the Position record vs the Order record
+            #   if more contracts are bought
 
-            # REVIEW: Since the edit_order API call isn't working (and I've reached out to support),
-            #  I'll just cancel the order and place a new one. This shouldn't run that often for
-            #  the DCA take profit orders, however, I do want to solve this for trailing take profit
+            # print("  Take Profit: order.average_filled_price", order.average_filled_price)
+            # self.loc.log_or_console(True, "I", "order.avg_filled_price", order.avg_filled_price)
 
-            # NOTE: In order to update the order, we need to get it first, then check the values against
-            #   if we have an updates contact "size" or "price" based on the DCA orders, if not
-            #   then we can skip this
+            avg_filled_price = round(int(order.average_filled_price))
+            # self.loc.log_or_console(True, "I", "avg_filled_price", avg_filled_price)
 
-            base_size = take_profit_order.base_size
-            limit_price = take_profit_order.limit_price
+            # current_price = position.current_price
+            # print(" current_price:", current_price)
 
-            check_price_size_msg = f" {int(limit_price)} != {int(take_profit_price)} or {base_size} != {new_size}"
-            self.loc.log_or_console(True, "I", "check_price_size_msg", check_price_size_msg)
+            number_of_contracts = position.number_of_contracts
+            # print(" number_of_contracts:", number_of_contracts)
 
-            if int(limit_price) != int(take_profit_price) or int(base_size) != int(new_size):
+            take_profit_percentage = 0.015
+            # print(f" take_profit_percentage: %{take_profit_percentage * 100}")
 
-                # Pass the order_id as a list. Can place multiple order ids if necessary, but not in this case
-                cancelled_order = self.cb_adv_api.cancel_order(order_ids=[order_id])
-                self.loc.log_or_console(True, "I", "cancelled_order", cancelled_order)
+            #
+            # Calculate the take profit price (Long or Short)
+            #
+            take_profit_offset_price = int(float(avg_filled_price) * take_profit_percentage)
+            # print(" take_profit_offset_price:", take_profit_offset_price)
 
-                self.loc.log_or_console(True, "I", None,
-                                        " >>> Creating new order with updated PRICE or SIZE settings!")
+            take_profit_price = ""
+
+            # If we're LONG, then we need to place a profitable SELL order
+            if side == "LONG":  # BUY / LONG
+                take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
+                    int(avg_filled_price) + take_profit_offset_price)
+                self.loc.log_or_console(True, "I", "SELL Short take_profit_price: $", take_profit_price)
+
+            # If we're SHORT, then we need to place a profitable BUY order
+            elif side == "SHORT":  # SELL / SHORT
+                take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
+                    int(avg_filled_price) - take_profit_offset_price)
+                self.loc.log_or_console(True, "I", "BUY Long take_profit_price: $", take_profit_price)
+
+            # leverage = "3"
+            order_type = "limit_limit_gtc"
+
+            # If we don't have an existing take profit order, create one
+            if existing_take_profit_order is False:
+                # print("\n >>> Create new take_profit_order")
+                self.loc.log_or_console(True, "I", None, ">>> Create new take_profit_order")
+
                 # Take Profit Order
-                self.cb_adv_api.create_order(side=take_profit_side,
-                                             product_id=product_id,
-                                             size=new_size,
-                                             limit_price=take_profit_price,
-                                             leverage='',
-                                             order_type=order_type)
-            else:
-                self.loc.log_or_console(True, "I", None,
-                                        " ...No changes with take profit order in PRICE or SIZE...")
+                order_created = self.cb_adv_api.create_order(side=take_profit_side,
+                                                             product_id=product_id,
+                                                             size=number_of_contracts,
+                                                             limit_price=take_profit_price,
+                                                             leverage='',
+                                                             order_type=order_type,
+                                                             bot_note="TAKE_PROFIT")
+                print("TAKE_PROFIT order_created!")
+                # print("TAKE_PROFIT order_created:", order_created)
+
+            else:  # Otherwise, let's edit and update the order based on the market and position(s)
+                self.loc.log_or_console(True, "I", None, ">>> Check Existing Take Profit Order...")
+
+                # pp(take_profit_order)
+                tp_order_id = take_profit_order.order_id
+                tp_client_order_id = take_profit_order.client_order_id
+                # self.loc.log_or_console(True, "I", "tp_order_id", tp_order_id)
+                # self.loc.log_or_console(True, "I", "tp_client_order_id", tp_client_order_id)
+
+                # For limit GTC orders only
+                size = take_profit_order.base_size
+                # self.loc.log_or_console(True, "I", "take_profit_order size", size)
+                # self.loc.log_or_console(True, "I", "number_of_contracts", number_of_contracts)
+                # self.loc.log_or_console(True, "I", "take_profit_price", take_profit_price)
+                #
+                # See if we need to update the size based on the existing number of
+                # contracts in the position
+                if int(number_of_contracts) > int(size):
+                    new_size = number_of_contracts
+                    self.loc.log_or_console(True, "W", "take_profit_order new_size", new_size)
+                else:
+                    new_size = size
+                # print(" take_profit_order new_size:", new_size)
+
+                # FOR TESTING
+                # take_profit_price = "62230"
+                # new_size = str(2)
+
+                # REVIEW: Since the edit_order API call isn't working (and I've reached out to support),
+                #  I'll just cancel the order and place a new one. This shouldn't run that often for
+                #  the DCA take profit orders, however, I do want to solve this for trailing take profit
+
+                # NOTE: In order to update the order, we need to get it first, then check the values against
+                #   if we have an updates contact "size" or "price" based on the DCA orders, if not
+                #   then we can skip this
+
+                base_size = take_profit_order.base_size
+                limit_price = take_profit_order.limit_price
+
+                check_price_size_msg = f" {int(limit_price)} != {int(take_profit_price)} or {base_size} != {new_size}"
+                self.loc.log_or_console(True, "I", "check_price_size_msg", check_price_size_msg)
+
+                # Check to see if either price or size don't match
+                if (int(limit_price) != int(take_profit_price)) is True or (int(base_size) != int(new_size)) is True:
+
+                    # NOTE: Cancel the existing take profit order, update it's db record,
+                    #  then place a new take profit with the the updated price and size
+
+                    if len(tp_order_id) > 0:
+                        # Pass the order_id as a list. Can place multiple order ids if necessary, but not in this case
+                        cancelled_order = self.cb_adv_api.cancel_order(order_ids=[tp_order_id])
+                        self.loc.log_or_console(True, "I", "cancelled_order", cancelled_order)
+
+                        field_values = {
+                            "bot_active": 0,
+                            "order_status": "CANCELLED"
+                        }
+                        updated_cancelled_order = self.cb_adv_api.update_order_fields(client_order_id=tp_client_order_id,
+                                                                                      field_values=field_values)
+                        self.loc.log_or_console(True, "I", "updated_cancelled_order", updated_cancelled_order)
+
+                    self.loc.log_or_console(True, "I", None,
+                                            " >>> Creating new order with updated PRICE or SIZE settings!")
+                    # Take Profit Order
+                    self.cb_adv_api.create_order(side=take_profit_side,
+                                                 product_id=product_id,
+                                                 size=new_size,
+                                                 limit_price=take_profit_price,
+                                                 leverage='',
+                                                 order_type=order_type,
+                                                 bot_note="TAKE_PROFIT")
+                else:
+                    self.loc.log_or_console(True, "I", None,
+                                            " ...No changes with take profit order in PRICE or SIZE...")
+
+        else:
+            self.loc.log_or_console(True, "W", "No open positions | orders", position, order)
 
 
 if __name__ == "__main__":

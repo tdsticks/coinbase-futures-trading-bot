@@ -13,6 +13,7 @@ import pytz
 import os
 import re
 
+
 # REVIEW: Profit / Loss calculation is off again - investigate
 #   This issue seems like another bug with Coinbase API's positions avg_entry_price
 #   Need to pull my data from the list_orders for better accuracy
@@ -122,7 +123,9 @@ def create_app():
         file_handler.setLevel(logging.WARNING)
         console_handler.setLevel(logging.WARNING)
 
-    flask_app.logger.addHandler(file_handler) # Add the file handler
+    # Remove default Flask logger handlers and add custom handlers
+    del flask_app.logger.handlers[:]
+    flask_app.logger.addHandler(file_handler)  # Add the file handler
     flask_app.logger.addHandler(console_handler)  # Add the console handler
 
     # flask_app.logger.debug('----------------- restarting Flask app -----------------')
@@ -145,6 +148,7 @@ app.config.from_object(Config())
 cbapi = CoinbaseAdvAPI(app)
 tm = TradeManager(app)
 loc = LogOrConsole(app)  # Send to Log or Console or both
+
 
 @app.route('/', methods=['GET'])
 def index():
@@ -221,7 +225,6 @@ def get_balance_summary_job():
 
     # Check if the market is open or not
     if tm.is_trading_time(now):
-
         # Balance Summary get and store
         futures_balance = cbapi.get_balance_summary()
         # pp(futures_balance)
@@ -260,7 +263,7 @@ def check_trading_conditions_job():
         tm.check_trading_conditions()
 
 
-@scheduler.task('interval', id='do_job_4', seconds=35, misfire_grace_time=900)
+@scheduler.task('interval', id='do_job_4', seconds=20, misfire_grace_time=900)
 def list_and_store_future_orders_job():
     loc.log_or_console(True, "D", None, msg1=":list_and_store_future_orders_job:")
 
@@ -270,6 +273,7 @@ def list_and_store_future_orders_job():
     # BUG: Was getting an error from this order_status: UNKNOWN_ORDER_STATUS
 
     all_order_status = ["OPEN", "FILLED", "CANCELLED", "EXPIRED", "FAILED"]
+
     # all_order_status = ["OPEN"]
 
     def run_all_list_orders(statuses, month, product_id):
@@ -279,12 +283,12 @@ def list_and_store_future_orders_job():
         loc.log_or_console(True, "D", month_msg, product_id_msg)
         for status in statuses:
             orders = cbapi.list_orders(product_id=product_id, order_status=status)
-            loc.log_or_console(True, "D", status,"Cnt", len(orders['orders']))
+            status_msg = f" {status}"
+            loc.log_or_console(True, "D", status_msg, "Cnt", len(orders['orders']))
             if len(orders['orders']) > 0:
                 cbapi.store_or_update_orders_from_api(orders)
 
     if tm.is_trading_time(now):
-
         curr_month = cbapi.get_current_short_month_uppercase()
         next_month = cbapi.get_next_short_month_uppercase()
         # loc.log_or_console(True, "I","next_month", next_month)

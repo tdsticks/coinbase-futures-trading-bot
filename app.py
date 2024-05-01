@@ -14,10 +14,12 @@ import os
 import re
 
 # TODO: Integrate the bot_config values
+# TODO: If we manually cancel or close our position, then we need to cancel and updates orders
 # TODO: Explore finding a better time to open order within the Weekly / Daily Signal
-#   Might be using the 15 min signal to find best opportunity
+#   Might be using the 1 Hour or 15 min signal to find best opportunity
 # TODO: Do we also create a trailing take profit feature?
 # TODO: Do we need the websocket to watch prices?
+# TODO: Need a way to manually trigger bot to open trade when I want
 
 
 # set configuration values
@@ -97,7 +99,7 @@ def create_app():
     file_handler.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$")  # Ensures on ly files with dates are matched
 
     formatter = logging.Formatter(
-        '[%(asctime)s] %(levelname)s in [%(filename)s:%(lineno)d] %(module)s %(message)s'
+        '[%(asctime)s] %(levelname)s in %(module)s %(message)s'
     )
 
     # Set the formatter to the file logging
@@ -243,10 +245,9 @@ def get_coinbase_futures_products_job():
         cbapi.store_btc_futures_products(list_future_products)
 
 
-@scheduler.task('interval', id='do_job_3', seconds=30, misfire_grace_time=900)
+@scheduler.task('interval', id='do_job_3', seconds=20, misfire_grace_time=900)
 def check_trading_conditions_job():
-    # print('\n:check_trading_conditions_job:')
-    loc.log_or_console(True, "I", None, msg1="")
+    loc.log_or_console(True, "I", None, msg1="------------------------------")
     loc.log_or_console(True, "I", None, msg1=":check_trading_conditions_job:")
 
     # NOTE: This is the main trading method with additional methods
@@ -259,8 +260,9 @@ def check_trading_conditions_job():
         tm.check_trading_conditions()
 
 
-@scheduler.task('interval', id='do_job_4', seconds=20, misfire_grace_time=900)
+@scheduler.task('interval', id='do_job_4', seconds=25, misfire_grace_time=900)
 def list_and_store_future_orders_job():
+    loc.log_or_console(True, "I", None, msg1="------------------------------")
     loc.log_or_console(True, "D", None, msg1=":list_and_store_future_orders_job:")
 
     # Check if the market is open or not
@@ -273,14 +275,19 @@ def list_and_store_future_orders_job():
     # all_order_status = ["OPEN"]
 
     def run_all_list_orders(statuses, month, product_id):
-        loc.log_or_console(True, "D", None, None)
-        month_msg = f"Month: {month}"
-        product_id_msg = f"Product: {product_id}"
-        loc.log_or_console(True, "D", month_msg, product_id_msg)
+        # loc.log_or_console(True, "D", None, None)
+        # month_msg = f"Month: {month}"
+        # product_id_msg = f"Product: {product_id}"
+        # loc.log_or_console(True, "D", month_msg, product_id_msg)
         for status in statuses:
             orders = cbapi.list_orders(product_id=product_id, order_status=status)
-            status_msg = f" {status}"
-            loc.log_or_console(True, "D", status_msg, "Cnt", len(orders['orders']))
+            # status_msg = f" {status}"
+            # loc.log_or_console(True, "D", status_msg, "Cnt", len(orders['orders']))
+
+            # if status == "FAILED":
+            #     loc.log_or_console(True, "D", status_msg, "Failed Orders",
+            #                        orders['orders'])
+
             if len(orders['orders']) > 0:
                 cbapi.store_or_update_orders_from_api(orders)
 
@@ -308,7 +315,7 @@ def list_and_store_future_orders_job():
         #     cbapi.store_or_update_orders_from_api(all_orders)
 
 
-# @scheduler.task('interval', id='do_job_6', seconds=30, misfire_grace_time=900)
+# @scheduler.task('interval', id='do_job_6', seconds=100000, misfire_grace_time=900)
 # def test_ladder_orders_job():
 #     print('\n:test_ladder_orders_job:')
 #
@@ -333,7 +340,10 @@ def list_and_store_future_orders_job():
 #     side = "SELL"
 #     print(" side:", side)
 #
-#     tm.ladder_orders(side=side,
+#     # How many ladder orders?
+#     ladder_order_qty = 5
+#
+#     tm.ladder_orders(quantity=ladder_order_qty, side=side,
 #                      product_id=relevant_future_product.product_id,
 #                      bid_price=cur_future_bid_price,
 #                      ask_price=cur_future_ask_price)

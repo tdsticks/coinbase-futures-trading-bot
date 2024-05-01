@@ -106,6 +106,7 @@ class FuturesOrder(db.Model):
 class FuturePosition(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.String(128), nullable=False)
+    creation_origin = db.Column(db.String(128), default="coinbase_ui", nullable=True)
     expiration_time = db.Column(db.DateTime, nullable=False)
     side = db.Column(db.String(10), nullable=False)
     number_of_contracts = db.Column(db.Integer, nullable=False)

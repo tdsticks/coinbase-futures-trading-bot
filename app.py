@@ -16,10 +16,13 @@ import re
 
 # TODO: Still having issues with storing the Aurox signals, maybe we just
 #  store the latest timeframes?
+# TODO: Switch to MySQL DB from SQLite
 # TODO: Integrate the bot_config values
 # TODO: Do we also create a trailing take profit feature?
 # TODO: Do we need the websocket to watch prices?
 # TODO: Need a way to manually trigger bot to open trade when I want
+# TODO: May need more DCA orders for large market movements, 10-12%
+#  and increase contract size as we layer (may need more money in the account)
 
 config = configparser.ConfigParser()
 config.read('bot_config.ini')
@@ -29,7 +32,6 @@ config.sections()
 # set configuration values
 class Config:
     SCHEDULER_API_ENABLED = True
-
 
 # NOTE: Futures markets are open for trading from Sunday 6 PM to
 #  Friday 5 PM ET (excluding observed holidays),
@@ -81,8 +83,7 @@ def create_app():
     print("DEBUG:", flask_app.config['DEBUG'])
 
     db.init_app(flask_app)
-    migrate = Migrate(flask_app, db)
-    # print("migrate:", migrate)
+    Migrate(flask_app, db)
 
     with flask_app.app_context():
         db.create_all()
@@ -222,8 +223,17 @@ def webhook():
 # initialize scheduler
 scheduler = APScheduler()
 
+disable_balance_summary = config['scheduler.jobs']['disable_balance_summary']
+disable_coinbase_futures_products = config['scheduler.jobs']['disable_coinbase_futures_products']
+disable_trading_conditions = config['scheduler.jobs']['disable_trading_conditions']
+disable_list_and_store_future_orders = config['scheduler.jobs']['disable_list_and_store_future_orders']
 
-@scheduler.task('interval', id='do_job_1', seconds=125, misfire_grace_time=900)
+balance_summary_time = int(config['scheduler.jobs']['balance_summary_time'])
+coinbase_futures_products_time = int(config['scheduler.jobs']['coinbase_futures_products_time'])
+trading_conditions_time = int(config['scheduler.jobs']['trading_conditions_time'])
+future_orders_time = int(config['scheduler.jobs']['future_orders_time'])
+
+@scheduler.task('interval', id='balance_summary', seconds=balance_summary_time, misfire_grace_time=900)
 def get_balance_summary_job():
     loc.log_or_console(True, "D", None, ":get_balance_summary_job:")
 
@@ -240,7 +250,7 @@ def get_balance_summary_job():
 
 
 # Runs every 6 hours
-@scheduler.task('interval', id='do_job_2', seconds=600, misfire_grace_time=900)
+@scheduler.task('interval', id='products', seconds=coinbase_futures_products_time, misfire_grace_time=900)
 def get_coinbase_futures_products_job():
     loc.log_or_console(True, "D", None, msg1=":get_coinbase_futures_products_job:")
 
@@ -254,7 +264,7 @@ def get_coinbase_futures_products_job():
         cbapi.store_btc_futures_products(list_future_products)
 
 
-@scheduler.task('interval', id='do_job_3', seconds=20, misfire_grace_time=900)
+@scheduler.task('interval', id='trading', seconds=trading_conditions_time, misfire_grace_time=900)
 def check_trading_conditions_job():
     loc.log_or_console(True, "I", None, msg1="------------------------------")
     loc.log_or_console(True, "I", None, msg1=":check_trading_conditions_job:")
@@ -269,7 +279,7 @@ def check_trading_conditions_job():
         tm.check_trading_conditions()
 
 
-@scheduler.task('interval', id='do_job_4', seconds=25, misfire_grace_time=900)
+@scheduler.task('interval', id='orders', seconds=future_orders_time, misfire_grace_time=900)
 def list_and_store_future_orders_job():
     loc.log_or_console(True, "I", None, msg1="------------------------------")
     loc.log_or_console(True, "D", None, msg1=":list_and_store_future_orders_job:")
@@ -284,14 +294,14 @@ def list_and_store_future_orders_job():
     # all_order_status = ["OPEN"]
 
     def run_all_list_orders(statuses, month, product_id):
-        # loc.log_or_console(True, "D", None, None)
-        # month_msg = f"Month: {month}"
-        # product_id_msg = f"Product: {product_id}"
-        # loc.log_or_console(True, "D", month_msg, product_id_msg)
+        loc.log_or_console(True, "D", None, None)
+        month_msg = f"Month: {month}"
+        product_id_msg = f"Product: {product_id}"
+        loc.log_or_console(True, "D", month_msg, product_id_msg)
         for status in statuses:
             orders = cbapi.list_orders(product_id=product_id, order_status=status)
-            # status_msg = f" {status}"
-            # loc.log_or_console(True, "D", status_msg, "Cnt", len(orders['orders']))
+            status_msg = f" {status}"
+            loc.log_or_console(True, "D", status_msg, "Cnt", len(orders['orders']))
 
             # if status == "FAILED":
             #     loc.log_or_console(True, "D", status_msg, "Failed Orders",
@@ -324,7 +334,7 @@ def list_and_store_future_orders_job():
         #     cbapi.store_or_update_orders_from_api(all_orders)
 
 
-# @scheduler.task('interval', id='do_job_6', seconds=100000, misfire_grace_time=900)
+# @scheduler.task('interval', id='do_job_6', seconds=150000, misfire_grace_time=900)
 # def test_ladder_orders_job():
 #     print('\n:test_ladder_orders_job:')
 #
@@ -355,13 +365,39 @@ def list_and_store_future_orders_job():
 #     tm.ladder_orders(quantity=ladder_order_qty, side=side,
 #                      product_id=relevant_future_product.product_id,
 #                      bid_price=cur_future_bid_price,
-#                      ask_price=cur_future_ask_price)
+#                      ask_price=cur_future_ask_price,
+#                      manual_price='')
 
+
+# @scheduler.task('interval', id='do_job_6', seconds=10, misfire_grace_time=900)
+# def get_current_position_job():
+#     loc.log_or_console(True, "I", None, msg1="------------------------------")
+#     loc.log_or_console(True, "I", None, msg1=":get_current_position_job:")
+#
+#     future_contract = cbapi.get_relevant_future_from_db()
+#
+#     # Get Current Positions
+#     future_positions = cbapi.get_future_position(future_contract.product_id)
+#     pp(future_positions)
 
 scheduler.init_app(app)
 scheduler.start()
 
+# Check if we've disabled any of the schedule jobs from the bot_config.ini file
+if disable_balance_summary == 'True':
+    loc.log_or_console(True, "I", " !!! Pausing Schedule Job", msg1="balance_summary")
+    scheduler.pause_job('balance_summary')
+if disable_coinbase_futures_products == 'True':
+    loc.log_or_console(True, "I", " !!! Pausing Schedule Job", msg1="products")
+    scheduler.pause_job('products')
+if disable_trading_conditions == 'True':
+    loc.log_or_console(True, "I", " !!! Pausing Schedule Job", msg1="trading")
+    scheduler.pause_job('trading')
+if disable_list_and_store_future_orders == 'True':
+    loc.log_or_console(True, "I", " !!! Pausing Schedule Job", msg1="orders")
+    scheduler.pause_job('orders')
+
+
 if __name__ == '__main__':
-    # print(":", __name__, ":")
     # Note: On PythonAnywhere or other production environments, you might not need to run the app like this.
     app.run(use_reloader=False, debug=True, port=5000)

@@ -1,5 +1,6 @@
 from coinbase.rest import RESTClient
 from coinbase import jwt_generator
+import configparser
 import http.client
 from coinbase.websocket import (WSClient, WSClientConnectionClosedException,
                                 WSClientException)
@@ -21,6 +22,10 @@ load_dotenv()
 API_KEY = os.getenv('API_KEY')
 API_SECRET = os.getenv('API_SECRET')
 UUID = os.getenv('UUID')
+
+config = configparser.ConfigParser()
+config.read('bot_config.ini')
+config.sections()
 
 
 # print("UUID:", UUID)
@@ -413,6 +418,15 @@ class CoinbaseAdvAPI:
 
         return list_futures_positions
 
+    def get_future_position(self, product_id: str):
+        self.loc.log_or_console(True, "D", None,
+                                ":get_future_position:")
+
+        get_futures_positions = self.client.get_futures_position(product_id=product_id)
+        # pp(get_futures_positions)
+
+        return get_futures_positions
+
     def store_future_positions(self, p_list_futures_positions):
         self.loc.log_or_console(True, "D", None,
                                 ":store_future_positions:")
@@ -760,6 +774,8 @@ class CoinbaseAdvAPI:
                 order_status="FILLED", side=dca_side, bot_note=dca)
             if dca_order:
                 # self.loc.log_or_console(True, "I", "dca_order", dca_order)
+                self.loc.log_or_console(True, "I", "dca_order.limit_price", dca_order.limit_price)
+                self.loc.log_or_console(True, "I", "dca_order.average_filled_price", dca_order.average_filled_price)
                 dca_count += 1
                 dca_avg_filled_price += round(int(dca_order.average_filled_price))
 
@@ -1307,8 +1323,10 @@ class TradeManager:
         # self.loc.log_or_console(True, "D", None, ":decide_trade_direction:")
 
         # Define thresholds for long and short decisions
-        long_threshold = 100
-        short_threshold = -100
+        # long_threshold = 100
+        # short_threshold = -100
+        long_threshold = int(config['trade.conditions']['trade_direction_long_threshold'])
+        short_threshold = int(config['trade.conditions']['trade_direction_short_threshold'])
 
         if calc_score >= long_threshold:
             self.loc.log_or_console(True, "I",
@@ -1327,6 +1345,7 @@ class TradeManager:
             return 'neutral'
 
     def check_all_signals_to_score(self, week_sig, day_sig, twelve_sig, eight_sig, four_sig, hour_sig, fifteen_sig):
+        self.loc.log_or_console(True, "D", None, "----------------------------")
         self.loc.log_or_console(True, "D", None, ":check_all_signals_to_score:")
 
         # NOTE: Created a scoring systems based on the signal timeframes. If the score is
@@ -1337,13 +1356,21 @@ class TradeManager:
 
         # REVIEW: Should we adjust the weight of these values? using hours currently
 
-        weekly_weight = 168
-        daily_weight = 24
-        twelve_hr_weight = 12
-        eight_hr_weight = 8
-        four_hr_weight = 4
-        one_hour_weight = 1
-        fifteen_min_weight = 0.25
+        # weekly_weight = 168
+        # daily_weight = 24
+        # twelve_hr_weight = 12
+        # eight_hr_weight = 8
+        # four_hr_weight = 4
+        # one_hour_weight = 1
+        # fifteen_min_weight = 0.25
+
+        weekly_weight = int(config['trade.conditions']['weekly_weight'])
+        daily_weight = int(config['trade.conditions']['daily_weight'])
+        twelve_hr_weight = int(config['trade.conditions']['twelve_hr_weight'])
+        eight_hr_weight = int(config['trade.conditions']['eight_hr_weight'])
+        four_hr_weight = int(config['trade.conditions']['four_hr_weight'])
+        one_hour_weight = int(config['trade.conditions']['one_hour_weight'])
+        fifteen_min_weight = float(config['trade.conditions']['fifteen_min_weight'])
 
         weekly_ts_formatted = None
         daily_ts_formatted = None
@@ -1397,7 +1424,7 @@ class TradeManager:
                                                                                              calculated_score)
         if fifteen_sig:
             (calculated_score, fifteen_min_ts_formatted) = display_signal_and_calc_signal_score(fifteen_sig,
-                                                                                               fifteen_min_weight,
+                                                                                                fifteen_min_weight,
                                                                                                 calculated_score)
 
         timestamp_obj = {
@@ -1485,6 +1512,9 @@ class TradeManager:
             hours = seconds // 3600
             minutes = (seconds % 3600) // 60
 
+            # contract_grace_days = 3
+            contract_grace_days = int(config['end.of.contract.switch.period']['grace_days'])
+
             # FOR TESTING ONLY
             # days = 10
 
@@ -1504,7 +1534,7 @@ class TradeManager:
                                             "   > next_month_product.product_id",
                                             next_month_product['product_id'])
                     return next_month_product['product_id'], next_month
-            elif days <= 3:
+            elif days <= contract_grace_days:
                 # If the contract expires in less than or equal to 3 days
                 contract_msg = (f"  > Contract {current_future_product.product_id} is close to expiring"
                                 f" in {days} days, {hours} hours, and {minutes} minutes.")
@@ -1545,52 +1575,68 @@ class TradeManager:
                     next_contact = fp
         return next_contact, next_month
 
-    def ladder_orders(self, quantity: int, side: str, product_id: str, bid_price, ask_price):
+    def ladder_orders(self, quantity: int, side: str, product_id: str, bid_price, ask_price,
+                      manual_price: str = ''):
         self.loc.log_or_console(True, "D", None, ":ladder_orders:")
 
         # NOTE: This is part of our strategy in placing DCA limit orders if the trade goes against us,
         #   even though both the Weekly and Daily signals are in our favor. This not only helps
         #   cover the volatility of the market and all the effects it, it also can help be more profitable
-        #   if we're carefuly. We also need to adjust the closing Long or Short order we'll place to
+        #   if we're carefully. We also need to adjust the closing Long or Short order we'll place to
         #   help with risk management and taking profit.
-
-        # NOTE: 1%, 2%, 3%, 4%, 5% limit orders for DCA (Dollar-Cost-Averaging)
 
         size = "1"
         leverage = "3"
         order_type = "limit_limit_gtc"
         cur_future_price = ""
 
-        if side == "BUY":  # BUY / LONG
-            cur_future_price = bid_price
-        elif side == "SELL":  # SELL / SHORT
-            cur_future_price = ask_price
-        # print("cur_future_price:", cur_future_price)
+        if manual_price == '':
+            if side == "BUY":  # BUY / LONG
+                cur_future_price = bid_price
+            elif side == "SELL":  # SELL / SHORT
+                cur_future_price = ask_price
+            # print("cur_future_price:", cur_future_price)
+        else:
+            cur_future_price = manual_price
         self.loc.log_or_console(True, "I", "cur_future_price", cur_future_price)
 
+        dca_trade_1_per = float(config['dca.ladder.trade_percentages']['dca_trade_1_per'])
+        dca_trade_2_per = float(config['dca.ladder.trade_percentages']['dca_trade_2_per'])
+        dca_trade_3_per = float(config['dca.ladder.trade_percentages']['dca_trade_3_per'])
+        dca_trade_4_per = float(config['dca.ladder.trade_percentages']['dca_trade_4_per'])
+        dca_trade_5_per = float(config['dca.ladder.trade_percentages']['dca_trade_5_per'])
+
         dca_note_list = ['DCA1', 'DCA2', 'DCA3', 'DCA4', 'DCA5']
-        dca_per_offset_list = [0.01, 0.02, 0.03, 0.04, 0.05]
+        # dca_per_offset_list = [0.01, 0.02, 0.03, 0.04, 0.05]
+        dca_per_offset_list = [dca_trade_1_per,
+                               dca_trade_2_per,
+                               dca_trade_3_per,
+                               dca_trade_4_per,
+                               dca_trade_5_per]
 
         def create_dca_orders():
-
             for i, note in enumerate(dca_note_list):
-                print(i, quantity - 1)
-
                 if i <= quantity - 1:
                     dcg_limit_price = ""
                     dca_trade_per_offset = int(float(cur_future_price) * dca_per_offset_list[i])
-                    # print(" dca_trade_per_offset: %", dca_trade_per_offset)
+                    self.loc.log_or_console(True, "D",
+                                            "   DCA Trade Per Offset",
+                                            dca_trade_per_offset)
 
                     # Calculate the DCA orders (Long or Short)
                     if side == "BUY":  # BUY / LONG
                         dcg_limit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
                             int(cur_future_price) - dca_trade_per_offset)
-                        print(" Buy Long dcg_limit_price: $", dcg_limit_price)
+                        self.loc.log_or_console(True, "D",
+                                                "   > Buy Long dcg_limit_price: $",
+                                                dcg_limit_price)
 
                     elif side == "SELL":  # SELL / SHORT
                         dcg_limit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
                             int(cur_future_price) + dca_trade_per_offset)
-                        print(" Sell Short dcg_limit_price: $", dcg_limit_price)
+                        self.loc.log_or_console(True, "D",
+                                                "   > Sell Short dcg_limit_price: $",
+                                                dcg_limit_price)
 
                     # Create DCA Trade
                     dca_order_created = self.cb_adv_api.create_order(side=side,
@@ -1600,8 +1646,7 @@ class TradeManager:
                                                                      leverage=leverage,
                                                                      order_type=order_type,
                                                                      bot_note=note)
-                    print("DCA order_created!")
-                    print("DCA order_created:", dca_order_created)
+                    self.loc.log_or_console(True, "D", "DCA order_created!", dca_order_created)
 
         create_dca_orders()
 
@@ -1684,10 +1729,6 @@ class TradeManager:
                                                                                          one_hour_signals,
                                                                                          fifteen_min_signals)
 
-        # self.loc.log_or_console(True, "I","   >>> Total Trading Score", signal_score)
-        # self.loc.log_or_console(True, "I","   >>> Position Trade Direction",
-        #                         position_trade_direction)
-
         weekly_ts_formatted = ts_obj['weekly_ts_fmt']
         daily_ts_formatted = ts_obj['daily_ts_fmt']
         twelve_hour_ts_formatted = ts_obj['twelve_hr_ts_fmt']
@@ -1698,7 +1739,7 @@ class TradeManager:
 
         # Make sure we have a future position
         if len(future_positions['positions']) > 0:
-            self.loc.log_or_console(True, "I", None, " >>> We have an active position(s)")
+            self.loc.log_or_console(True, "I", None, "  > We have an active position(s) <")
 
             position_side = future_positions['positions'][0]['side']
             # print("position_side:", position_side)
@@ -1741,6 +1782,41 @@ class TradeManager:
             self.loc.log_or_console(True, "I", None,
                                     " >>> Check if its a good market to place a trade")
 
+            # NOTE: Check to cancel any OPEN orders
+
+            future_contract = self.cb_adv_api.get_relevant_future_from_db()
+            remaining_open_orders = self.cb_adv_api.list_orders(product_id=future_contract.product_id,
+                                                                order_status="OPEN")
+            if 'orders' in remaining_open_orders:
+                self.loc.log_or_console(True, "D",
+                                        "remaining_open_orders count",
+                                        len(remaining_open_orders['orders']))
+                order_ids = []
+                client_order_ids = []
+                for order in remaining_open_orders['orders']:
+                    order_ids.append(order['order_id'])
+                    client_order_ids.append(order['client_order_id'])
+
+                # Pass the order_id as a list. Can place multiple order ids if necessary,
+                #   but not in this case
+                cancelled_order = self.cb_adv_api.cancel_order(order_ids=order_ids)
+                self.loc.log_or_console(True, "I", "    > cancelled_order", cancelled_order)
+
+                field_values = {
+                    "bot_active": 0,
+                    "order_status": "CANCELLED"
+                }
+
+                # for order in remaining_open_orders['orders']:
+                for client_order_id in client_order_ids:
+                    # Update order so we don't the system doesn't try to use it for future orders
+                    updated_cancelled_order = self.cb_adv_api.update_order_fields(
+                        client_order_id=client_order_id,
+                        field_values=field_values
+                    )
+                    self.loc.log_or_console(True, "I", "    > updated_cancelled_order", updated_cancelled_order)
+
+            # If our overall position trade direction isn't neutral, then proceed
             if position_trade_direction != "neutral":
                 self.loc.log_or_console(True, "I", None,
                                         "-----------------------------------")
@@ -1789,6 +1865,7 @@ class TradeManager:
                                             "   Fifteen Min Future Avg Price",
                                             fifteen_min_future_avg_price)
 
+                    # Just setting a high default number to check again
                     percentage_diff = 10
 
                     # The signal price should be lower than current price (price rising)
@@ -1806,10 +1883,11 @@ class TradeManager:
                     # NOTE: Make sure the price difference from the 15 Min signal and current price
                     #   isn't too far off or beyond 1%, so we try to be safe and get more profit
 
-                    # REVIEW: Still seeing what a good value is here 1 = 1%
-                    percentage_diff_threshold = 1
+                    # Set a limit value is here (1 = 1%)
+                    # percentage_diff_limit = 1
+                    percentage_diff_limit = int(config['trade.conditions']['percentage_diff_limit'])
 
-                    if percentage_diff < percentage_diff_threshold:
+                    if percentage_diff < percentage_diff_limit:
                         good_per_diff_msg = (f"   >>> Proceeding! current price diff of "
                                              f"{check_signal_and_current_price_diff} "
                                              f"which is {percentage_diff}%")
@@ -1831,62 +1909,6 @@ class TradeManager:
                                      f"Limit Price:{limit_price} Size:{size} Leverage:{leverage}")
                         self.loc.log_or_console(True, "I", None, order_msg)
 
-                        # NOTE: If we place a limit order and it doesn't go through, we need to control
-                        #   this from placing more orders. Only one should be allowed until it goes through.
-                        #   We should cancel the order, then place again. We set a bot_note to track this
-
-                        current_open_position = self.cb_adv_api.get_current_take_profit_order_from_db(
-                            order_status="OPEN",
-                            side=trade_side,
-                            bot_note="MAIN")
-
-                        # NOTE: If this loops back through and has not been bought or sold (a position),
-                        #   then cancel and try again at a better average bid/ask price.
-
-                        if current_open_position is not None:
-                            current_open_position_order_id = [current_open_position.order_id]
-                            print("MAIN current_open_position_order_id:", current_open_position_order_id)
-
-                            self.cb_adv_api.cancel_order(order_ids=current_open_position_order_id)
-
-                        # NOTE: Get then close all open orders
-
-                        remaining_open_orders = self.cb_adv_api.list_orders(product_id=product_id,
-                                                                            order_status="OPEN")
-                        # print("remaining_open_orders:", remaining_open_orders)
-
-                        if 'orders' in remaining_open_orders:
-                            self.loc.log_or_console(True, "D",
-                                                    "remaining_open_orders count",
-                                                    len(remaining_open_orders['orders']))
-
-                            order_ids = []
-                            client_order_ids = []
-                            for order in remaining_open_orders['orders']:
-                                order_ids.append(order['order_id'])
-                                client_order_ids.append(order['client_order_id'])
-                            print("remaining_open_orders order_ids:", order_ids)
-                            print("remaining_open_orders client_order_ids:", client_order_ids)
-
-                            # Pass the order_id as a list. Can place multiple order ids if necessary,
-                            #   but not in this case
-                            cancelled_order = self.cb_adv_api.cancel_order(order_ids=order_ids)
-                            self.loc.log_or_console(True, "I", "cancelled_order", cancelled_order)
-
-                            field_values = {
-                                "bot_active": 0,
-                                "order_status": "CANCELLED"
-                            }
-
-                            # for order in remaining_open_orders['orders']:
-                            for client_order_id in client_order_ids:
-                                # Update order so we don't the system doesn't try to use it for future orders
-                                updated_cancelled_order = self.cb_adv_api.update_order_fields(
-                                    client_order_id=client_order_id,
-                                    field_values=field_values
-                                )
-                                self.loc.log_or_console(True, "I", "updated_cancelled_order", updated_cancelled_order)
-
                         # Create a new MAIN order
                         order_created = self.cb_adv_api.create_order(side=trade_side,
                                                                      product_id=product_id,
@@ -1896,6 +1918,8 @@ class TradeManager:
                                                                      order_type=order_type,
                                                                      bot_note="MAIN")
                         print("MAIN order_created:", order_created)
+
+                        # TODO: Need to see if the MAIN order is filled first before placing ladder orders
 
                         # How many ladder orders?
                         ladder_order_qty = 5
@@ -1973,11 +1997,10 @@ class TradeManager:
                     dca_side = "SELL"
 
                 dca_avg_filled_price, dca_count = self.cb_adv_api.get_dca_filled_orders_from_db(dca_side=dca_side)
-                # self.loc.log_or_console(True, "I", "dca_count", dca_count)
+                self.loc.log_or_console(True, "I", "    dca_count", dca_count)
                 self.loc.log_or_console(True, "I", "    dca_avg_filled_price", dca_avg_filled_price)
 
                 # Get the average filled price from the Future Order
-                # avg_filled_price = round(int(order.average_filled_price), 2)
                 avg_filled_price = round((int(order.average_filled_price) + dca_avg_filled_price) / dca_count)
                 self.loc.log_or_console(True, "I", "    avg_filled_price", avg_filled_price)
 
@@ -2125,21 +2148,24 @@ class TradeManager:
             # NOTE: Find all the FILLED DCA orders to get the average price
 
             dca_avg_filled_price, dca_count = self.cb_adv_api.get_dca_filled_orders_from_db(dca_side=dca_side)
-            # self.loc.log_or_console(True, "I", "dca_count", dca_count)
-            self.loc.log_or_console(True, "I", "    dca_avg_filled_price", dca_avg_filled_price)
+            # self.loc.log_or_console(True, "I", "    DCA Avg Filled Price", dca_avg_filled_price)
+            test_dca_avg_filled_price = dca_avg_filled_price / 5
+            print("test_dca_avg_filled_price:", test_dca_avg_filled_price)
 
             avg_filled_price = round((int(order.average_filled_price) + dca_avg_filled_price) / dca_count)
-            self.loc.log_or_console(True, "I", "    avg_filled_price", avg_filled_price)
+            self.loc.log_or_console(True, "I", "    Avg Filled Price", avg_filled_price)
 
             number_of_contracts = position.number_of_contracts
-            # print(" number_of_contracts:", number_of_contracts)
+            self.loc.log_or_console(True, "I", "    Number Of Contracts", number_of_contracts)
 
-            take_profit_percentage = 0.02
-            # print(f" take_profit_percentage: %{take_profit_percentage * 100}")
+            # take_profit_percentage = 0.02
+            take_profit_percentage = float(config['take.profit.order']['take_profit_percentage'])
+            tp_per_msg = f" take_profit_percentage: %{take_profit_percentage * 100}"
+            self.loc.log_or_console(True, "I", None, tp_per_msg)
 
             # Calculate the take profit price (Long or Short)
             take_profit_offset_price = int(float(avg_filled_price) * take_profit_percentage)
-            # print(" take_profit_offset_price:", take_profit_offset_price)
+            self.loc.log_or_console(True, "I", "    take_profit_offset_price", take_profit_offset_price)
 
             take_profit_price = ""
 
@@ -2257,11 +2283,9 @@ class TradeManager:
                                                                              bot_note="TAKE_PROFIT")
                     self.loc.log_or_console(True, "I",
                                             "   >>> take_profit_order_created", take_profit_order_created)
-
                 else:
                     self.loc.log_or_console(True, "I", None,
                                             "   ...No changes with take profit order in PRICE or SIZE...")
-
         else:
             self.loc.log_or_console(True, "W",
                                     "    No open positions | orders", position, order)

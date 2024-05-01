@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_migrate import Migrate
+import configparser
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from db import db
@@ -13,13 +14,16 @@ import pytz
 import os
 import re
 
+# TODO: Still having issues with storing the Aurox signals, maybe we just
+#  store the latest timeframes?
 # TODO: Integrate the bot_config values
-# TODO: If we manually cancel or close our position, then we need to cancel and updates orders
-# TODO: Explore finding a better time to open order within the Weekly / Daily Signal
-#   Might be using the 1 Hour or 15 min signal to find best opportunity
 # TODO: Do we also create a trailing take profit feature?
 # TODO: Do we need the websocket to watch prices?
 # TODO: Need a way to manually trigger bot to open trade when I want
+
+config = configparser.ConfigParser()
+config.read('bot_config.ini')
+config.sections()
 
 
 # set configuration values
@@ -88,12 +92,17 @@ def create_app():
     if not os.path.exists(log_directory):
         os.makedirs(log_directory)
 
+    log_filename = config['logs.config']['log_filename']
+    when = config['logs.config']['time_rotation_when']
+    interval = int(config['logs.config']['interval'])
+    backup_count = int(config['logs.config']['backup_count'])
+
     # Log file handler with timed rotating files
     file_handler = TimedRotatingFileHandler(
-        filename=os.path.join(log_directory, 'flask_app.log'),
-        when='H',
-        interval=4,
-        backupCount=180  # currently keeps 30 days of logs (120 rotations * 4 hours)
+        filename=os.path.join(log_directory, log_filename),
+        when=when,
+        interval=interval,
+        backupCount=backup_count  # currently keeps 30 days of logs (120 rotations * 4 hours)
     )
     file_handler.suffix = "%Y-%m-%d %H.%M.%S"  # Date Time format
     file_handler.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$")  # Ensures on ly files with dates are matched

@@ -440,7 +440,7 @@ class CoinbaseAdvAPI:
                         db.session.add(new_position)
                     db.session.commit()
                     self.loc.log_or_console(True, "I", None,
-                                            "Future position updated")
+                                            "   Future position updated")
             except db_errors as e:
                 db.session.rollback()
                 self.loc.log_or_console(True, "E", "Error storing future position", e)
@@ -705,7 +705,7 @@ class CoinbaseAdvAPI:
         return get_order
 
     def get_current_take_profit_order_from_db(self, order_status: str, side: str,
-                                              bot_note: str):
+                                              bot_note: str, get_all_orders=False):
         # self.loc.log_or_console(True, "I", None, "get_current_take_profit_order_from_db")
 
         open_futures = None
@@ -714,17 +714,32 @@ class CoinbaseAdvAPI:
 
         with self.flask_app.app_context():  # Push an application context
             try:
-                # Search the database for a matching futures contract
-                open_futures = FuturesOrder.query.filter(
-                    and_(
-                        FuturesOrder.order_status == order_status,
-                        FuturesOrder.creation_origin == "bot_order",
-                        FuturesOrder.bot_note == bot_note,
-                        FuturesOrder.bot_active == 1,
-                        FuturesOrder.side == side
-                    )
-                ).first()
-                # self.loc.log_or_console(True, "I", "open_futures", open_futures)
+
+                if get_all_orders:
+                    # Search the database for a matching futures contract
+                    open_futures = FuturesOrder.query.filter(
+                        and_(
+                            FuturesOrder.order_status == order_status,
+                            FuturesOrder.creation_origin == "bot_order",
+                            FuturesOrder.bot_note == bot_note,
+                            FuturesOrder.bot_active == 1,
+                            FuturesOrder.side == side
+                        )
+                    ).all()
+                    # self.loc.log_or_console(True, "I",
+                    #                         "open_futures", open_futures)
+                else:
+                    # Search the database for a matching futures contract
+                    open_futures = FuturesOrder.query.filter(
+                        and_(
+                            FuturesOrder.order_status == order_status,
+                            FuturesOrder.creation_origin == "bot_order",
+                            FuturesOrder.bot_note == bot_note,
+                            FuturesOrder.bot_active == 1,
+                            FuturesOrder.side == side
+                        )
+                    ).first()
+                    # self.loc.log_or_console(True, "I", "open_futures", open_futures)
 
                 return open_futures
             except Exception as e:
@@ -1311,6 +1326,100 @@ class TradeManager:
                                     calc_score, "Holding off.")
             return 'neutral'
 
+    def check_all_signals_to_score(self, week_sig, day_sig, twelve_sig, eight_sig, four_sig, hour_sig, fifteen_sig):
+        self.loc.log_or_console(True, "D", None, ":check_all_signals_to_score:")
+
+        # NOTE: Created a scoring systems based on the signal timeframes. If the score is
+        #   high or low enough based on the market direction (long or short), then we may
+        #   be safer to trade in a particular direction
+
+        calculated_score = 0
+
+        # REVIEW: Should we adjust the weight of these values? using hours currently
+
+        weekly_weight = 168
+        daily_weight = 24
+        twelve_hr_weight = 12
+        eight_hr_weight = 8
+        four_hr_weight = 4
+        one_hour_weight = 1
+        fifteen_min_weight = 0.25
+
+        weekly_ts_formatted = None
+        daily_ts_formatted = None
+        twelve_hour_ts_formatted = None
+        eight_hour_ts_formatted = None
+        four_hour_ts_formatted = None
+        one_hour_ts_formatted = None
+        fifteen_min_ts_formatted = None
+
+        def display_signal_and_calc_signal_score(signal_record, weight, p_calc_score):
+            # future_avg_price = 0
+            # for future_price_data in signal_record.future_prices:
+            #     signal_future_bid_price = future_price_data.future_bid_price
+            #     signal_future_ask_price = future_price_data.future_ask_price
+            #     future_avg_price = (signal_future_bid_price + signal_future_ask_price) / 2
+
+            signals_dt = signal_record.timestamp
+            ts_formatted = signals_dt.strftime("%B %d, %Y, %I:%M %p")
+
+            # msg = (f"   > {signal_record.time_unit} - Signal: {signal_record.signal} "
+            #        f"| Date: {ts_formatted} "
+            #        f"| Avg Future Price: ${future_avg_price}")
+            # self.loc.log_or_console(True, "D", None, msg)
+
+            p_calc_score += self.calculate_signal_score(signal_record.signal, weight)
+            return p_calc_score, ts_formatted
+
+        if week_sig:
+            (calculated_score, weekly_ts_formatted) = display_signal_and_calc_signal_score(week_sig,
+                                                                                           weekly_weight,
+                                                                                           calculated_score)
+        if day_sig:
+            (calculated_score, daily_ts_formatted) = display_signal_and_calc_signal_score(day_sig,
+                                                                                          daily_weight,
+                                                                                          calculated_score)
+        if twelve_sig:
+            (calculated_score, twelve_hour_ts_formatted) = display_signal_and_calc_signal_score(twelve_sig,
+                                                                                                twelve_hr_weight,
+                                                                                                calculated_score)
+        if eight_sig:
+            (calculated_score, eight_hour_ts_formatted) = display_signal_and_calc_signal_score(eight_sig,
+                                                                                               eight_hr_weight,
+                                                                                               calculated_score)
+        if four_sig:
+            (calculated_score, four_hour_ts_formatted) = display_signal_and_calc_signal_score(four_sig,
+                                                                                              four_hr_weight,
+                                                                                              calculated_score)
+        if hour_sig:
+            (calculated_score, one_hour_ts_formatted) = display_signal_and_calc_signal_score(hour_sig,
+                                                                                             one_hour_weight,
+                                                                                             calculated_score)
+        if fifteen_sig:
+            (calculated_score, fifteen_min_ts_formatted) = display_signal_and_calc_signal_score(fifteen_sig,
+                                                                                               fifteen_min_weight,
+                                                                                                calculated_score)
+
+        timestamp_obj = {
+            "weekly_ts_fmt": weekly_ts_formatted,
+            "daily_ts_fmt": daily_ts_formatted,
+            "twelve_hr_ts_fmt": twelve_hour_ts_formatted,
+            "eight_hr_ts_fmt": eight_hour_ts_formatted,
+            "four_hr_ts_fmt": four_hour_ts_formatted,
+            "one_hr_ts_fmt": one_hour_ts_formatted,
+            "fifteen_min_ts_fmt": fifteen_min_ts_formatted,
+        }
+
+        # self.loc.log_or_console(True, "I",
+        #                         "   >>> Total Trading Score", calculated_score)
+
+        position_trade_direction = self.decide_trade_direction(calculated_score)
+        # self.loc.log_or_console(True, "I",
+        #                         "   >>> Position Trade Direction",
+        #                         position_trade_direction)
+
+        return position_trade_direction, calculated_score, timestamp_obj
+
     def compare_last_daily_to_todays_date(self):
         self.loc.log_or_console(True, "I", None, ":compare_last_daily_to_todays_date:")
 
@@ -1356,18 +1465,16 @@ class TradeManager:
         # Get the current month's contract
         current_future_product = self.cb_adv_api.get_relevant_future_from_db()
         self.loc.log_or_console(True, "I",
-                                "current_future_product",
+                                "   Current Future Product",
                                 current_future_product.product_id)
 
         current_month = self.cb_adv_api.get_current_short_month_uppercase()
         self.loc.log_or_console(True, "I",
-                                "current_month",
-                                current_month)
+                                "   Current Month", current_month)
 
         next_month = self.cb_adv_api.get_next_short_month_uppercase()
         self.loc.log_or_console(True, "I",
-                                "next_month",
-                                next_month)
+                                "   Next Month", next_month)
 
         if current_future_product:
             contract_expiry = current_future_product.contract_expiry.replace(tzinfo=pytz.utc)
@@ -1393,7 +1500,8 @@ class TradeManager:
                 next_month_product, next_month = self.find_next_month_contract(list_future_products, next_month)
 
                 if next_month_product:
-                    self.loc.log_or_console(True, "I", "    > next_month_product.product_id",
+                    self.loc.log_or_console(True, "I",
+                                            "   > next_month_product.product_id",
                                             next_month_product['product_id'])
                     return next_month_product['product_id'], next_month
             elif days <= 3:
@@ -1407,16 +1515,17 @@ class TradeManager:
                 next_month_product, next_month = self.find_next_month_contract(list_future_products, next_month)
 
                 if next_month_product:
-                    self.loc.log_or_console(True, "I", "next_month_product.product_id",
+                    self.loc.log_or_console(True, "I",
+                                            "   > next_month_product.product_id",
                                             next_month_product['product_id'])
                     return next_month_product['product_id'], next_month
             else:
-                contract_msg = (f"Current contract {current_future_product.product_id} is safe to trade. "
+                contract_msg = (f"  Current contract {current_future_product.product_id} is safe to trade. "
                                 f"It expires in {days} days, {hours} hours, and {minutes} minutes.")
                 self.loc.log_or_console(True, "I", None, contract_msg)
                 return None, None
         else:
-            self.loc.log_or_console(True, "I", None, "No current future product found")
+            self.loc.log_or_console(True, "I", None, "  !!! No current future product found")
             return None, None
 
     @staticmethod
@@ -1538,6 +1647,7 @@ class TradeManager:
         return False
 
     def check_trading_conditions(self):
+        self.loc.log_or_console(True, "D", None, "--------------------------")
         self.loc.log_or_console(True, "D", None, ":check_trading_conditions:")
 
         # Update any cancelled orders in the database (in case we close things manually, etc.)
@@ -1548,17 +1658,45 @@ class TradeManager:
         #######################
 
         next_months_product_id, next_month = self.check_for_contract_expires()
-        self.loc.log_or_console(True, "I", "Next Months Product ID", next_months_product_id)
-        self.loc.log_or_console(True, "I", "Next Month", next_month)
+        if next_months_product_id:
+            self.loc.log_or_console(True, "I", "Next Months Product ID", next_months_product_id)
+            self.loc.log_or_console(True, "I", "Next Month", next_month)
 
         # Get Current Positions from API, we just need to acknowledge this position exists
         #  and get the position side
         future_positions = self.cb_adv_api.list_future_positions()
         # print("Future Positions:")
         # pp(future_positions)
-        # print(future_positions['positions'])
-        # print(len(future_positions['positions']))
 
+        weekly_signals = self.get_latest_weekly_signal()
+        daily_signals = self.get_latest_daily_signal()
+        twelve_hour_signals = self.get_latest_12_hour_signal()
+        eight_hour_signals = self.get_latest_8_hour_signal()
+        four_hour_signals = self.get_latest_4_hour_signal()
+        one_hour_signals = self.get_latest_1_hour_signal()
+        fifteen_min_signals = self.get_latest_15_minute_signal()
+
+        position_trade_direction, signal_score, ts_obj = self.check_all_signals_to_score(weekly_signals,
+                                                                                         daily_signals,
+                                                                                         twelve_hour_signals,
+                                                                                         eight_hour_signals,
+                                                                                         four_hour_signals,
+                                                                                         one_hour_signals,
+                                                                                         fifteen_min_signals)
+
+        # self.loc.log_or_console(True, "I","   >>> Total Trading Score", signal_score)
+        # self.loc.log_or_console(True, "I","   >>> Position Trade Direction",
+        #                         position_trade_direction)
+
+        weekly_ts_formatted = ts_obj['weekly_ts_fmt']
+        daily_ts_formatted = ts_obj['daily_ts_fmt']
+        twelve_hour_ts_formatted = ts_obj['twelve_hr_ts_fmt']
+        eight_hour_ts_formatted = ts_obj['eight_hr_ts_fmt']
+        four_hour_ts_formatted = ts_obj['four_hr_ts_fmt']
+        one_hour_ts_formatted = ts_obj['one_hr_ts_fmt']
+        fifteen_min_ts_formatted = ts_obj['fifteen_min_ts_fmt']
+
+        # Make sure we have a future position
         if len(future_positions['positions']) > 0:
             self.loc.log_or_console(True, "I", None, " >>> We have an active position(s)")
 
@@ -1574,119 +1712,34 @@ class TradeManager:
             # Now, get the Future Order from the DB so we have more accurate data
             cur_position_order = self.cb_adv_api.get_current_take_profit_order_from_db(
                 order_status="FILLED", side=side, bot_note="MAIN")
-            self.loc.log_or_console(True, "I", "Cur Position Order", cur_position_order)
+            # self.loc.log_or_console(True, "I", "Cur Position Order", cur_position_order)
 
             # Clear and store the active future position
             self.cb_adv_api.store_future_positions(future_positions)
 
-            # Get the position from the database
-            # NOTE: We should only get one if we're only trading one future (BTC)
-            with (self.flask_app.app_context()):  # Push an application context
-                try:
-                    # NOTE: position doesn't have the all most accurate data we need, so
-                    #  we uses the order to help supplement what we need
-                    positions = FuturePosition.query.all()
-                    self.loc.log_or_console(True, "I", "positions", positions)
-                    for position in positions:
-                        self.tracking_current_position_profit_loss(position, cur_position_order, next_month)
-                        self.track_take_profit_order(position, cur_position_order)
+            # Make sure we have a FILLED order from our position
+            if cur_position_order:
+                # Get the position from the database
+                # NOTE: We should only get one if we're only trading one future (BTC)
+                with (self.flask_app.app_context()):  # Push an application context
+                    try:
+                        # NOTE: position doesn't have the all most accurate data we need, so
+                        #  we uses the order to help supplement what we need
+                        positions = FuturePosition.query.all()
+                        # self.loc.log_or_console(True, "I", "positions", positions)
+                        for position in positions:
+                            self.tracking_current_position_profit_loss(position, cur_position_order, next_month)
+                            self.track_take_profit_order(position, cur_position_order)
 
-                except Exception as e:
-                    self.loc.log_or_console(True, "E", "Unexpected error:", msg1=e)
+                    except Exception as e:
+                        self.loc.log_or_console(True, "E", "Unexpected error:", msg1=e)
+            else:
+                self.loc.log_or_console(True, "W",
+                                        "    >>> NO Current Position Order Found", cur_position_order)
         else:
             self.loc.log_or_console(True, "I", None, " >>> No Open Position")
             self.loc.log_or_console(True, "I", None,
                                     " >>> Check if its a good market to place a trade")
-            #######################
-            # If not, then is it a good time to place a market order?
-            # Let's pull the last weekly and daily signals, check and wait...
-            #######################
-
-            # REVIEW: Create a scoring systems based on the signal timeframes. If the score is
-            #   high or low enough based on the market direction (long or short), then we may be safer
-            #   to trade in a particular direction
-
-            weekly_signals = self.get_latest_weekly_signal()
-            daily_signals = self.get_latest_daily_signal()
-            twelve_hour_signals = self.get_latest_12_hour_signal()
-            eight_hour_signals = self.get_latest_8_hour_signal()
-            four_hour_signals = self.get_latest_4_hour_signal()
-            one_hour_signals = self.get_latest_1_hour_signal()
-            fifteen_min_signals = self.get_latest_15_minute_signal()
-
-            # REVIEW: Should we adjust the weight of these values? using hours currently
-
-            weekly_weight = 168
-            daily_weight = 24
-            twelve_hr_weight = 12
-            eight_hr_weight = 8
-            four_hr_weight = 4
-            one_hour_weight = 1
-            fifteen_min_weight = 0.25
-
-            calc_score = 0
-
-            weekly_ts_formatted = None
-            daily_ts_formatted = None
-            twelve_hour_ts_formatted = None
-            eight_hour_ts_formatted = None
-            four_hour_ts_formatted = None
-            one_hour_ts_formatted = None
-            fifteen_min_ts_formatted = None
-
-            def display_signal_and_calc_signal_score(signal_record, weight, p_calc_score):
-                future_avg_price = 0
-                for future_price_data in signal_record.future_prices:
-                    signal_future_bid_price = future_price_data.future_bid_price
-                    signal_future_ask_price = future_price_data.future_ask_price
-                    future_avg_price = (signal_future_bid_price + signal_future_ask_price) / 2
-
-                signals_dt = signal_record.timestamp
-                ts_formatted = signals_dt.strftime("%B %d, %Y, %I:%M %p")
-
-                # msg = (f"   > {signal_record.time_unit} - Signal: {signal_record.signal} "
-                #        f"| Date: {ts_formatted} "
-                #        f"| Avg Future Price: ${future_avg_price}")
-                # self.loc.log_or_console(True, "D", None, msg)
-                p_calc_score += self.calculate_signal_score(signal_record.signal, weight)
-                return p_calc_score, ts_formatted
-
-            if weekly_signals:
-                (calc_score, weekly_ts_formatted) = display_signal_and_calc_signal_score(weekly_signals,
-                                                                                         weekly_weight,
-                                                                                         calc_score)
-            if daily_signals:
-                (calc_score, daily_ts_formatted) = display_signal_and_calc_signal_score(daily_signals,
-                                                                                        daily_weight,
-                                                                                        calc_score)
-            if twelve_hour_signals:
-                (calc_score, twelve_hour_ts_formatted) = display_signal_and_calc_signal_score(twelve_hour_signals,
-                                                                                              twelve_hr_weight,
-                                                                                              calc_score)
-            if eight_hour_signals:
-                (calc_score, eight_hour_ts_formatted) = display_signal_and_calc_signal_score(eight_hour_signals,
-                                                                                             eight_hr_weight,
-                                                                                             calc_score)
-            if four_hour_signals:
-                (calc_score, four_hour_ts_formatted) = display_signal_and_calc_signal_score(four_hour_signals,
-                                                                                            four_hr_weight,
-                                                                                            calc_score)
-            if one_hour_signals:
-                (calc_score, one_hour_ts_formatted) = display_signal_and_calc_signal_score(one_hour_signals,
-                                                                                           one_hour_weight,
-                                                                                           calc_score)
-            if fifteen_min_signals:
-                (calc_score, fifteen_min_ts_formatted) = display_signal_and_calc_signal_score(fifteen_min_signals,
-                                                                                              fifteen_min_weight,
-                                                                                              calc_score)
-
-            self.loc.log_or_console(True, "I",
-                                    "   >>> Total Trading Score", calc_score)
-
-            position_trade_direction = self.decide_trade_direction(calc_score)
-            self.loc.log_or_console(True, "I",
-                                    "   >>> Position Trade Direction",
-                                    position_trade_direction)
 
             if position_trade_direction != "neutral":
                 self.loc.log_or_console(True, "I", None,
@@ -1743,7 +1796,7 @@ class TradeManager:
                     if position_trade_direction == 'long':
                         check_signal_and_current_price_diff = int(limit_price) - int(fifteen_min_future_avg_price)
                         percentage_diff = round((check_signal_and_current_price_diff
-                                             / int(fifteen_min_future_avg_price)) * 100, 2)
+                                                 / int(fifteen_min_future_avg_price)) * 100, 2)
 
                     elif position_trade_direction == 'short':
                         check_signal_and_current_price_diff = int(fifteen_min_future_avg_price) - int(limit_price)
@@ -1753,10 +1806,10 @@ class TradeManager:
                     # NOTE: Make sure the price difference from the 15 Min signal and current price
                     #   isn't too far off or beyond 1%, so we try to be safe and get more profit
 
-                    # HACK: Set this back to 0.75
+                    # REVIEW: Still seeing what a good value is here 1 = 1%
+                    percentage_diff_threshold = 1
 
-                    # if percentage_diff < 0.75:
-                    if percentage_diff < 6:
+                    if percentage_diff < percentage_diff_threshold:
                         good_per_diff_msg = (f"   >>> Proceeding! current price diff of "
                                              f"{check_signal_and_current_price_diff} "
                                              f"which is {percentage_diff}%")
@@ -1885,6 +1938,7 @@ class TradeManager:
                 self.loc.log_or_console(True, "W", None, fifteen_msg)
 
     def tracking_current_position_profit_loss(self, position, order, next_month):
+        self.loc.log_or_console(True, "D", None, "---------------------------------------")
         self.loc.log_or_console(True, "D", None, ":tracking_current_position_profit_loss:")
 
         # print(" position:", position)
@@ -1920,19 +1974,19 @@ class TradeManager:
 
                 dca_avg_filled_price, dca_count = self.cb_adv_api.get_dca_filled_orders_from_db(dca_side=dca_side)
                 # self.loc.log_or_console(True, "I", "dca_count", dca_count)
-                self.loc.log_or_console(True, "I", "dca_avg_filled_price", dca_avg_filled_price)
+                self.loc.log_or_console(True, "I", "    dca_avg_filled_price", dca_avg_filled_price)
 
                 # Get the average filled price from the Future Order
                 # avg_filled_price = round(int(order.average_filled_price), 2)
                 avg_filled_price = round((int(order.average_filled_price) + dca_avg_filled_price) / dca_count)
-                self.loc.log_or_console(True, "I", "  avg_filled_price", avg_filled_price)
+                self.loc.log_or_console(True, "I", "    avg_filled_price", avg_filled_price)
 
                 # Get the current price from the Future Position
                 current_price = round(int(position.current_price), 2)
-                self.loc.log_or_console(True, "I", "  current_price", current_price)
+                self.loc.log_or_console(True, "I", "    current_price", current_price)
 
                 number_of_contracts = position.number_of_contracts
-                self.loc.log_or_console(True, "I", "  number_of_contracts", number_of_contracts)
+                self.loc.log_or_console(True, "I", "    number_of_contracts", number_of_contracts)
 
                 # Calculate total cost and current value per contract
                 total_initial_cost = avg_filled_price * number_of_contracts * product_contract_size
@@ -1984,6 +2038,7 @@ class TradeManager:
             self.loc.log_or_console(True, "W", "No open positions", position)
 
     def track_take_profit_order(self, position, order):
+        self.loc.log_or_console(True, "D", None, "-------------------------")
         self.loc.log_or_console(True, "D", None, ":track_take_profit_order:")
 
         # NOTE: This is where we place an opposing order, so if we're longing the market,
@@ -2014,38 +2069,72 @@ class TradeManager:
             elif side == "SHORT":  # SELL / SHORT
                 take_profit_side = "BUY"
                 dca_side = "SELL"
-            self.loc.log_or_console(True, "I", "take_profit_side", take_profit_side)
+            self.loc.log_or_console(True, "I", "    take_profit_side", take_profit_side)
 
             # TODO: Need to test if the average price changes based on more positions (contracts)
             #   This may need to be adjusted back to using the Position record vs the Order record
             #   if more contracts are bought
 
-            # Now, get the Future Order from the DB so we have more accurate data
+            # Now, get the ALL Future Orders from the DB so we have more accurate data
             take_profit_order = self.cb_adv_api.get_current_take_profit_order_from_db(
-                order_status="OPEN", side=take_profit_side, bot_note="TAKE_PROFIT")
-            # self.loc.log_or_console(True, "I", "take_profit_order exists 1", take_profit_order)
+                order_status="OPEN", side=take_profit_side, bot_note="TAKE_PROFIT", get_all_orders=True)
+            # self.loc.log_or_console(True, "I", "  > take_profit_order exists 1", take_profit_order)
+
+            # BUG: Need to fix duplicate Take Profit orders, creating work around for now
+
+            # NOTE: If we have more than one Take Profit, keep one and cancel the rest
+
+            if len(take_profit_order) > 1:
+                # Loop through all of the take profit orders, except one (we keep that)
+                for tp in range(0, len(take_profit_order) - 1):
+                    loop_tp_order = take_profit_order[tp]
+                    loop_tp_order_id = loop_tp_order.order_id
+                    loop_tp_client_order_id = loop_tp_order.client_order_id
+                    # self.loc.log_or_console(True, "I", "    >>> tp", tp, loop_tp_order)
+                    # self.loc.log_or_console(True, "I", "    tp.order_id", loop_tp_order_id)
+
+                    # Pass the order_id as a list. Can place multiple order ids if necessary, but not in this case
+                    cancelled_order = self.cb_adv_api.cancel_order(order_ids=[loop_tp_order_id])
+                    self.loc.log_or_console(True, "I",
+                                            "    Cancelled Extra Order", cancelled_order)
+                    field_values = {
+                        "bot_active": 0,
+                        "order_status": "CANCELLED"
+                    }
+                    # Update order so we don't the system doesn't try to use it for future orders
+                    updated_cancelled_order = self.cb_adv_api.update_order_fields(
+                        client_order_id=loop_tp_client_order_id,
+                        field_values=field_values)
+                    self.loc.log_or_console(True, "I",
+                                            "    Updated Extra Cancelled Order", updated_cancelled_order)
+
+            # Run this again to get only one take profit order
+            take_profit_order = self.cb_adv_api.get_current_take_profit_order_from_db(
+                order_status="OPEN", side=take_profit_side, bot_note="TAKE_PROFIT", get_all_orders=False)
+            # self.loc.log_or_console(True, "I",
+            #                         "   > take_profit_order exists 1.5", take_profit_order)
 
             # Now see if we have a take profit order already open
             if take_profit_order is not None:
-                # self.loc.log_or_console(True, "I", "take_profit_order exists 2", take_profit_order)
+                # self.loc.log_or_console(True, "I", "  > take_profit_order exists 2", take_profit_order)
                 existing_take_profit_order = True
             else:
                 existing_take_profit_order = False
-                self.loc.log_or_console(True, "W", "No take_profit_order", take_profit_order)
+                self.loc.log_or_console(True, "W", "    No take_profit_order", take_profit_order)
 
-            # REVIEW: Need a better way to find all the FILLED DCA orders to get the average price
+            # NOTE: Find all the FILLED DCA orders to get the average price
 
             dca_avg_filled_price, dca_count = self.cb_adv_api.get_dca_filled_orders_from_db(dca_side=dca_side)
             # self.loc.log_or_console(True, "I", "dca_count", dca_count)
-            self.loc.log_or_console(True, "I", "dca_avg_filled_price", dca_avg_filled_price)
+            self.loc.log_or_console(True, "I", "    dca_avg_filled_price", dca_avg_filled_price)
 
             avg_filled_price = round((int(order.average_filled_price) + dca_avg_filled_price) / dca_count)
-            self.loc.log_or_console(True, "I", "avg_filled_price", avg_filled_price)
+            self.loc.log_or_console(True, "I", "    avg_filled_price", avg_filled_price)
 
             number_of_contracts = position.number_of_contracts
             # print(" number_of_contracts:", number_of_contracts)
 
-            take_profit_percentage = 0.015
+            take_profit_percentage = 0.02
             # print(f" take_profit_percentage: %{take_profit_percentage * 100}")
 
             # Calculate the take profit price (Long or Short)
@@ -2058,19 +2147,22 @@ class TradeManager:
             if side == "LONG":  # BUY / LONG
                 take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
                     int(avg_filled_price) + take_profit_offset_price)
-                self.loc.log_or_console(True, "I", "SELL Short take_profit_price: $", take_profit_price)
+                self.loc.log_or_console(True, "I", "    > SELL Short take_profit_price: $",
+                                        take_profit_price)
 
             # If we're SHORT, then we need to place a profitable BUY order
             elif side == "SHORT":  # SELL / SHORT
                 take_profit_price = self.cb_adv_api.adjust_price_to_nearest_increment(
                     int(avg_filled_price) - take_profit_offset_price)
-                self.loc.log_or_console(True, "I", "BUY Long take_profit_price: $", take_profit_price)
+                self.loc.log_or_console(True, "I", "    > BUY Long take_profit_price: $",
+                                        take_profit_price)
 
             order_type = "limit_limit_gtc"
 
             # If we don't have an existing take profit order, create one
             if existing_take_profit_order is False:
-                self.loc.log_or_console(True, "I", None, ">>> Create new take_profit_order")
+                self.loc.log_or_console(True, "I", None,
+                                        "  >>> Create new take_profit_order")
 
                 # Take Profit Order
                 order_created = self.cb_adv_api.create_order(side=take_profit_side,
@@ -2080,11 +2172,13 @@ class TradeManager:
                                                              leverage='',
                                                              order_type=order_type,
                                                              bot_note="TAKE_PROFIT")
-                print("TAKE_PROFIT order_created!")
-                # print("TAKE_PROFIT order_created:", order_created)
+                self.loc.log_or_console(True, "I", None,
+                                        "   >>> TAKE_PROFIT order_created!")
+                self.loc.log_or_console(True, "I", "    >>> Order:", order_created)
 
             else:  # Otherwise, let's edit and update the order based on the market and position(s)
-                self.loc.log_or_console(True, "I", None, ">>> Check Existing Take Profit Order...")
+                self.loc.log_or_console(True, "I", None,
+                                        "  >>> Check Existing Take Profit Order...")
                 # pp(take_profit_order)
                 tp_order_id = take_profit_order.order_id
                 tp_client_order_id = take_profit_order.client_order_id
@@ -2099,7 +2193,8 @@ class TradeManager:
                 # contracts in the position
                 if int(number_of_contracts) > int(size):
                     new_size = number_of_contracts
-                    self.loc.log_or_console(True, "W", "take_profit_order new_size", new_size)
+                    self.loc.log_or_console(True, "W",
+                                            "    take_profit_order new_size", new_size)
                 else:
                     new_size = size
                 # print(" take_profit_order new_size:", new_size)
@@ -2120,10 +2215,15 @@ class TradeManager:
                 limit_price = take_profit_order.limit_price
 
                 check_price_size_msg = f" {int(limit_price)} != {int(take_profit_price)} or {base_size} != {new_size}"
-                self.loc.log_or_console(True, "I", "check_price_size_msg", check_price_size_msg)
+                self.loc.log_or_console(True, "I",
+                                        "    Check Price Size Msg", check_price_size_msg)
 
                 # Check to see if either price or size don't match
                 if (int(limit_price) != int(take_profit_price)) is True or (int(base_size) != int(new_size)) is True:
+                    self.loc.log_or_console(True, "I", None,
+                                            "   >>> Either the prices are off or the contract sizes are off")
+                    self.loc.log_or_console(True, "I", None,
+                                            "   >>> Cancel the existing take profit or and place a new one!")
 
                     # NOTE: Cancel the existing take profit order, update it's db record,
                     #  then place a new take profit with the the updated price and size
@@ -2131,7 +2231,8 @@ class TradeManager:
                     if len(tp_order_id) > 0:
                         # Pass the order_id as a list. Can place multiple order ids if necessary, but not in this case
                         cancelled_order = self.cb_adv_api.cancel_order(order_ids=[tp_order_id])
-                        self.loc.log_or_console(True, "I", "cancelled_order", cancelled_order)
+                        self.loc.log_or_console(True, "I",
+                                                "    cancelled_order", cancelled_order)
 
                         field_values = {
                             "bot_active": 0,
@@ -2141,24 +2242,29 @@ class TradeManager:
                         updated_cancelled_order = self.cb_adv_api.update_order_fields(
                             client_order_id=tp_client_order_id,
                             field_values=field_values)
-                        self.loc.log_or_console(True, "I", "updated_cancelled_order", updated_cancelled_order)
+                        self.loc.log_or_console(True, "I",
+                                                "    updated_cancelled_order", updated_cancelled_order)
 
                     self.loc.log_or_console(True, "I", None,
-                                            " >>> Creating new order with updated PRICE or SIZE settings!")
+                                            "   >>> Creating new order with updated PRICE or SIZE settings!")
                     # Take Profit Order
-                    self.cb_adv_api.create_order(side=take_profit_side,
-                                                 product_id=product_id,
-                                                 size=new_size,
-                                                 limit_price=take_profit_price,
-                                                 leverage='',
-                                                 order_type=order_type,
-                                                 bot_note="TAKE_PROFIT")
+                    take_profit_order_created = self.cb_adv_api.create_order(side=take_profit_side,
+                                                                             product_id=product_id,
+                                                                             size=new_size,
+                                                                             limit_price=take_profit_price,
+                                                                             leverage='',
+                                                                             order_type=order_type,
+                                                                             bot_note="TAKE_PROFIT")
+                    self.loc.log_or_console(True, "I",
+                                            "   >>> take_profit_order_created", take_profit_order_created)
+
                 else:
                     self.loc.log_or_console(True, "I", None,
-                                            " ...No changes with take profit order in PRICE or SIZE...")
+                                            "   ...No changes with take profit order in PRICE or SIZE...")
 
         else:
-            self.loc.log_or_console(True, "W", "No open positions | orders", position, order)
+            self.loc.log_or_console(True, "W",
+                                    "    No open positions | orders", position, order)
 
 
 if __name__ == "__main__":

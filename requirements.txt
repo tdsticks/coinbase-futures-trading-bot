@@ -8,3 +8,7 @@ python-dotenv==1.0.1
 pytz==2024.1
 requests==2.31.0
 Flask-APScheduler==1.13.1
+# sqlite3-to-mysql==2.1.9 # Don't need this unless converting
+PyMySQL==1.1.0
+# numpy==1.26.4
+pandas==2.2.2

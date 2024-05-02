@@ -21,8 +21,7 @@ import re
 # TODO: Do we also create a trailing take profit feature?
 # TODO: Do we need the websocket to watch prices?
 # TODO: Need a way to manually trigger bot to open trade when I want
-# TODO: May need more DCA orders for large market movements, 10-12%
-#  and increase contract size as we layer (may need more money in the account)
+# TODO: Need to add more weight to DCA orders, need to increase contract as deeper.
 
 config = configparser.ConfigParser()
 config.read('bot_config.ini')
@@ -75,8 +74,11 @@ class Config:
 
 def create_app():
     flask_app = Flask(__name__)
-    flask_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///aurox_signals.db'
-    flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    sqlalchemy_database_uri = os.getenv('SQLALCHEMY_DATABASE_URI')
+    sqlalchemy_track_modifications = os.getenv('SQLALCHEMY_DATABASE_URI')
+    flask_app.config['SQLALCHEMY_DATABASE_URI'] = sqlalchemy_database_uri
+    flask_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = sqlalchemy_track_modifications
     flask_app.config['DEBUG'] = os.getenv('DEBUG', 'False') == 'True'
 
     # print("DEBUG:", os.getenv('DEBUG', 'False'))
@@ -233,6 +235,7 @@ coinbase_futures_products_time = int(config['scheduler.jobs']['coinbase_futures_
 trading_conditions_time = int(config['scheduler.jobs']['trading_conditions_time'])
 future_orders_time = int(config['scheduler.jobs']['future_orders_time'])
 
+
 @scheduler.task('interval', id='balance_summary', seconds=balance_summary_time, misfire_grace_time=900)
 def get_balance_summary_job():
     loc.log_or_console(True, "D", None, ":get_balance_summary_job:")
@@ -334,8 +337,8 @@ def list_and_store_future_orders_job():
         #     cbapi.store_or_update_orders_from_api(all_orders)
 
 
-# @scheduler.task('interval', id='do_job_6', seconds=150000, misfire_grace_time=900)
-# def test_ladder_orders_job():
+# @scheduler.task('interval', id='do_job_6', seconds=15000, misfire_grace_time=900)
+# def manual_ladder_orders_job():
 #     print('\n:test_ladder_orders_job:')
 #
 #     next_months_product_id, next_month = tm.check_for_contract_expires()
@@ -360,13 +363,17 @@ def list_and_store_future_orders_job():
 #     print(" side:", side)
 #
 #     # How many ladder orders?
-#     ladder_order_qty = 5
+#     # ladder_order_qty = 8
+#     ladder_order_qty = int(config['dca.ladder.trade_percentages']['ladder_quantity'])
+#
+#     # Override the starting entry price
+#     manual_price = '58945'
 #
 #     tm.ladder_orders(quantity=ladder_order_qty, side=side,
 #                      product_id=relevant_future_product.product_id,
 #                      bid_price=cur_future_bid_price,
 #                      ask_price=cur_future_ask_price,
-#                      manual_price='')
+#                      manual_price=manual_price)
 
 
 # @scheduler.task('interval', id='do_job_6', seconds=10, misfire_grace_time=900)

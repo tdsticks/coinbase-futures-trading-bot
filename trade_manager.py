@@ -7,7 +7,7 @@ from coinbase.websocket import (WSClient, WSClientConnectionClosedException,
 from models.signals import AuroxSignal, FuturePriceAtSignal
 from models.futures import (CoinbaseFuture, AccountBalanceSummary,
                             FuturePosition, FuturesOrder)
-from db import db, db_errors, joinedload, and_
+from db import db, db_errors, joinedload, and_, session
 from dotenv import load_dotenv
 from pprint import pprint as pp
 from datetime import datetime, time, timedelta
@@ -16,6 +16,8 @@ import os
 import calendar
 import uuid
 import json
+# import numpy as np
+import pandas as pd
 
 load_dotenv()
 
@@ -553,147 +555,152 @@ class CoinbaseAdvAPI:
         # limit_price
         # Ceiling price for which the order should get filled.
 
-        # NOTE: A unique UUID that we make (should store and not repeat, must be in UUID format
-        # Generate and print a UUID4
-        client_order_id = self.generate_uuid4()
-        # print("Generated client_order_id:", client_order_id, type(client_order_id))
-
-        # Convert UUID to a string
-        client_order_id_str = str(client_order_id)
-        # print("Client Order ID as string:", client_order_id_str)
-
-        quote_size = ''
-        base_size = ''
-        post_only = False
-        order_type_db_record = 'MARKET'  # Default
-        creation_origin = 'bot_order'
-
-        if order_type == 'limit_limit_gtc':
-            base_size = str(size)
-            order_type_db_record = 'LIMIT'
-        # elif order_type == 'market_market_ioc':
-        #     order_type_db_record = 'MARKET'
-        #     if side == "BUY":
-        #         quote_size = str(size)
-        #     elif side == "SELL":
-        #         base_size = str(size)
-        # print("order_configuration:")
-        # pp(order_configuration)
-
-        pre_order_for_storing = {
-            "order_id": None,
-            "product_id": product_id,
-            "side": side,
-            "client_order_id": client_order_id_str,
-            "success": False,
-            "failure_reason": None,
-            "error_message": None,
-            "error_details": None,
-            "order_type": order_type_db_record,
-            "creation_origin": creation_origin,
-            "bot_note": bot_note,
-            "bot_active": 1,
-            "quote_size": quote_size,
-            "base_size": base_size,
-            "limit_price": limit_price,
-            "leverage": leverage,
-            "post_only": post_only,
-            "end_time": None
-        }
-        # print("pre_order_for_storing:")
-        # pp(pre_order_for_storing)
-
-        self.store_order(pre_order_for_storing)
-
-        # try:
         order_created = {}
-        if side == "BUY" and order_type == 'limit_limit_gtc':
-            order_created = self.client.limit_order_gtc_buy(client_order_id=client_order_id_str,
-                                                            product_id=product_id,
-                                                            base_size=base_size,
-                                                            # leverage=leverage,
-                                                            limit_price=limit_price)
+        enable_live_trading = config['trade.conditions']['enable_live_trading']
+        self.loc.log_or_console(True, "D", "enable_live_trading", enable_live_trading)
 
-        elif side == "SELL" and order_type == 'limit_limit_gtc':
-            order_created = self.client.limit_order_gtc_sell(client_order_id=client_order_id_str,
-                                                             product_id=product_id,
-                                                             base_size=base_size,
-                                                             # leverage=leverage,
-                                                             limit_price=limit_price)
+        # Live trading enabled
+        if enable_live_trading:
 
-        # elif side == "BUY" and order_type == 'market_market_ioc':
-        #     order_created = self.client.market_order_buy(client_order_id=client_order_id_str,
-        #                                                  product_id=product_id,
-        #                                                  # leverage=leverage,
-        #                                                  quote_size=quote_size)
-        #
-        # elif side == "SELL" and order_type == 'market_market_ioc':
-        #     order_created = self.client.market_order_sell(client_order_id=client_order_id_str,
-        #                                                   product_id=product_id,
-        #                                                   # leverage=leverage,
-        #                                                   base_size=base_size)
-        # print(f"\norder_created: bot_note: {bot_note}")
-        # pp(order_created)
+            # NOTE: A unique UUID that we make (should store and not repeat, must be in UUID format
+            # Generate and print a UUID4
+            client_order_id = self.generate_uuid4()
+            # print("Generated client_order_id:", client_order_id, type(client_order_id))
 
-        if order_created.get('success'):
-            self.loc.log_or_console(True, "I", "Order successfully created")
-            self.loc.log_or_console(True, "D", None, order_created.get('success_response'))
+            # Convert UUID to a string
+            client_order_id_str = str(client_order_id)
+            # print("Client Order ID as string:", client_order_id_str)
 
-        if order_created.get('failure_reason'):
-            self.loc.log_or_console(True, "I", "Order creation failed")
-            self.loc.log_or_console(True, "D", None, order_created.get('failure_reason'))
+            quote_size = ''
+            base_size = ''
+            post_only = False
+            order_type_db_record = 'MARKET'  # Default
+            creation_origin = 'bot_order'
 
-            if order_created.get('error_response'):
-                self.loc.log_or_console(True, "E", "Error Message", order_created.get('error_response').get('message'))
-                self.loc.log_or_console(True, "E", "Error Details",
-                                        order_created.get('error_response').get('error_details'))
+            if order_type == 'limit_limit_gtc':
+                base_size = str(size)
+                order_type_db_record = 'LIMIT'
+            # elif order_type == 'market_market_ioc':
+            #     order_type_db_record = 'MARKET'
+            #     if side == "BUY":
+            #         quote_size = str(size)
+            #     elif side == "SELL":
+            #         base_size = str(size)
+            # print("order_configuration:")
+            # pp(order_configuration)
+
+            pre_order_for_storing = {
+                "order_id": None,
+                "product_id": product_id,
+                "side": side,
+                "client_order_id": client_order_id_str,
+                "success": False,
+                "failure_reason": None,
+                "error_message": None,
+                "error_details": None,
+                "order_type": order_type_db_record,
+                "creation_origin": creation_origin,
+                "bot_note": bot_note,
+                "bot_active": 1,
+                "quote_size": quote_size,
+                "base_size": base_size,
+                "limit_price": limit_price,
+                "leverage": leverage,
+                "post_only": post_only,
+                "end_time": None
+            }
+            # print("pre_order_for_storing:")
+            # pp(pre_order_for_storing)
+
+            self.store_order(pre_order_for_storing)
+
+
+            if side == "BUY" and order_type == 'limit_limit_gtc':
+                order_created = self.client.limit_order_gtc_buy(client_order_id=client_order_id_str,
+                                                                product_id=product_id,
+                                                                base_size=base_size,
+                                                                # leverage=leverage,
+                                                                limit_price=limit_price)
+
+            elif side == "SELL" and order_type == 'limit_limit_gtc':
+                order_created = self.client.limit_order_gtc_sell(client_order_id=client_order_id_str,
+                                                                 product_id=product_id,
+                                                                 base_size=base_size,
+                                                                 # leverage=leverage,
+                                                                 limit_price=limit_price)
+
+            # elif side == "BUY" and order_type == 'market_market_ioc':
+            #     order_created = self.client.market_order_buy(client_order_id=client_order_id_str,
+            #                                                  product_id=product_id,
+            #                                                  # leverage=leverage,
+            #                                                  quote_size=quote_size)
+            #
+            # elif side == "SELL" and order_type == 'market_market_ioc':
+            #     order_created = self.client.market_order_sell(client_order_id=client_order_id_str,
+            #                                                   product_id=product_id,
+            #                                                   # leverage=leverage,
+            #                                                   base_size=base_size)
+            # print(f"\norder_created: bot_note: {bot_note}")
+            # pp(order_created)
+
+            if order_created.get('success'):
+                self.loc.log_or_console(True, "I", "Order successfully created")
+                self.loc.log_or_console(True, "D", None, order_created.get('success_response'))
+
+            if order_created.get('failure_reason'):
+                self.loc.log_or_console(True, "I", "Order creation failed")
+                self.loc.log_or_console(True, "D", None, order_created.get('failure_reason'))
+
+                if order_created.get('error_response'):
+                    self.loc.log_or_console(True, "E", "Error Message", order_created.get('error_response').get('message'))
+                    self.loc.log_or_console(True, "E", "Error Details",
+                                            order_created.get('error_response').get('error_details'))
+                else:
+                    self.loc.log_or_console(True, "D", "No detailed error message provided.")
+
+            post_order_for_storing = {
+                "order_id": order_created['order_id'],
+                "product_id": product_id,
+                "side": side,
+                "client_order_id": client_order_id_str,
+                "success": order_created['success'],
+                "order_type": order_type_db_record,
+                "creation_origin": creation_origin,
+                "bot_note": bot_note,
+                "bot_active": 1,
+                "quote_size": quote_size,
+                "base_size": base_size,
+                "limit_price": limit_price,
+                "leverage": leverage,
+                "post_only": post_only
+            }
+
+            if "failure_reason" in order_created:
+                post_order_for_storing["failure_reason"] = order_created['failure_reason']
             else:
-                self.loc.log_or_console(True, "D", "No detailed error message provided.")
+                post_order_for_storing["failure_reason"] = None
 
-        post_order_for_storing = {
-            "order_id": order_created['order_id'],
-            "product_id": product_id,
-            "side": side,
-            "client_order_id": client_order_id_str,
-            "success": order_created['success'],
-            "order_type": order_type_db_record,
-            "creation_origin": creation_origin,
-            "bot_note": bot_note,
-            "bot_active": 1,
-            "quote_size": quote_size,
-            "base_size": base_size,
-            "limit_price": limit_price,
-            "leverage": leverage,
-            "post_only": post_only
-        }
+            if "error_message" in order_created:
+                post_order_for_storing["error_message"] = order_created['error_message']
+            else:
+                post_order_for_storing["error_message"] = None
 
-        if "failure_reason" in order_created:
-            post_order_for_storing["failure_reason"] = order_created['failure_reason']
+            if "error_details" in order_created:
+                post_order_for_storing["error_details"] = order_created['error_details']
+            else:
+                post_order_for_storing["error_details"] = None
+
+            if "end_time" in order_created:
+                post_order_for_storing["end_time"] = order_created['end_time']
+            else:
+                post_order_for_storing["end_time"] = None
+            # print("post_order_for_storing:")
+            # pp(post_order_for_storing)
+
+            self.store_order(post_order_for_storing)
+            # print("Order Created and Store in the DB")
         else:
-            post_order_for_storing["failure_reason"] = None
-
-        if "error_message" in order_created:
-            post_order_for_storing["error_message"] = order_created['error_message']
-        else:
-            post_order_for_storing["error_message"] = None
-
-        if "error_details" in order_created:
-            post_order_for_storing["error_details"] = order_created['error_details']
-        else:
-            post_order_for_storing["error_details"] = None
-
-        if "end_time" in order_created:
-            post_order_for_storing["end_time"] = order_created['end_time']
-        else:
-            post_order_for_storing["end_time"] = None
-        # print("post_order_for_storing:")
-        # pp(post_order_for_storing)
-
-        self.store_order(post_order_for_storing)
-        # print("Order Created and Store in the DB")
-        # except Exception as e:
-        #     print(f"Failed to create order - error: {e}")
-        #     pp(pre_order_for_storing)
+            self.loc.log_or_console(True, "D", "Live Trading Disabled")
 
         return order_created
 
@@ -774,8 +781,8 @@ class CoinbaseAdvAPI:
                 order_status="FILLED", side=dca_side, bot_note=dca)
             if dca_order:
                 # self.loc.log_or_console(True, "I", "dca_order", dca_order)
-                self.loc.log_or_console(True, "I", "dca_order.limit_price", dca_order.limit_price)
-                self.loc.log_or_console(True, "I", "dca_order.average_filled_price", dca_order.average_filled_price)
+                # self.loc.log_or_console(True, "I", "dca_order.limit_price", dca_order.limit_price)
+                # self.loc.log_or_console(True, "I", "dca_order.average_filled_price", dca_order.average_filled_price)
                 dca_count += 1
                 dca_avg_filled_price += round(int(dca_order.average_filled_price))
 
@@ -790,8 +797,8 @@ class CoinbaseAdvAPI:
             cancelled_order = self.client.cancel_orders(order_ids=order_ids)
             # self.loc.log_or_console(True, "I", "cancelled_order", cancelled_order)
         else:
-            print("No order ids to cancel")
-            self.loc.log_or_console(True, "W", " !!! No order ids to cancel")
+            pass
+            # self.loc.log_or_console(True, "W", " !!! No order ids to cancel")
         return cancelled_order
 
     def update_cancelled_orders(self):
@@ -825,6 +832,40 @@ class CoinbaseAdvAPI:
                         self.loc.log_or_console(True, "I",
                                                 "updated_cancelled_order",
                                                 updated_cancelled_order)
+            except Exception as e:
+                self.loc.log_or_console(True, "E",
+                                        "Database error getting", msg1=e)
+
+    def update_bot_active_orders(self):
+        self.loc.log_or_console(True, "I",
+                                None, "update_bot_active_orders")
+
+        with self.flask_app.app_context():  # Push an application context
+            try:
+                # Search the database for a matching futures contract
+                bot_active_orders = FuturesOrder.query.filter(
+                    and_(
+                        FuturesOrder.creation_origin == "bot_order",
+                        FuturesOrder.bot_active == 1,
+                    )
+                ).all()
+                self.loc.log_or_console(True, "I",
+                                        "bot_active_orders", bot_active_orders)
+
+                # If we have cancelled futures, update the bot_active
+                if bot_active_orders:
+                    for bot_active_order in bot_active_orders:
+                        field_values = {
+                            "bot_active": 0
+                        }
+                        # Update order so we don't the system doesn't try
+                        # to use it for future orders
+                        updated_bot_active_order = self.update_order_fields(
+                            client_order_id=bot_active_order.client_order_id,
+                            field_values=field_values)
+                        self.loc.log_or_console(True, "I",
+                                                "updated_bot_active_order",
+                                                updated_bot_active_order)
             except Exception as e:
                 self.loc.log_or_console(True, "E",
                                         "Database error getting", msg1=e)
@@ -1127,28 +1168,33 @@ class TradeManager:
                 # timestamp = data['timestamp']
                 timestamp = datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
                 timestamp = timestamp.replace(tzinfo=pytz.utc)
-                self.loc.log_or_console(True, "I", "timestamp", timestamp)
+                # self.loc.log_or_console(True, "I", "timestamp", timestamp)
 
                 signal_spot_price = data['price'].replace(',', '')
 
-                # Define the time window in which signals are considered potential duplicates
-                time_window = timedelta(minutes=10)
-                self.loc.log_or_console(True, "I", "time_window", time_window)
+                # Define a unique key combination for updating or inserting signals
+                unique_key = {
+                    'trading_pair': data['trading_pair'],
+                    'time_unit': data['timeUnit']
+                }
 
-                calc_time_window = AuroxSignal.timestamp.between(timestamp - time_window, timestamp + time_window)
-                self.loc.log_or_console(True, "I", "calc_time_window", calc_time_window)
+                # Attempt to find an existing signal with the same trading pair and time unit
+                existing_signal = AuroxSignal.query.filter_by(**unique_key).order_by(
+                    AuroxSignal.timestamp.desc()).first()
+                self.loc.log_or_console(True, "I", "    > Existing Signal", existing_signal)
+
+                new_signal = None
 
                 # Check for existing signal to prevent duplicates
-                existing_signal = AuroxSignal.query.filter_by(
-                    # timestamp=timestamp,
-                    timestamp=calc_time_window,
-                    price=signal_spot_price,
-                    signal=data['signal'],
-                    trading_pair=data['trading_pair'],
-                    time_unit=data['timeUnit']
-                ).first()
-
-                if existing_signal is None:
+                if existing_signal:
+                    # Update existing record
+                    existing_signal.timestamp = timestamp
+                    existing_signal.price = signal_spot_price
+                    existing_signal.signal = data['signal']
+                    db.session.add(existing_signal)
+                    self.loc.log_or_console(True, "I", "    > Updated existing signal", existing_signal)
+                else:
+                    # Create a new signal if none exists for the specific time unit and trading pair
                     new_signal = AuroxSignal(
                         timestamp=timestamp,
                         price=signal_spot_price,
@@ -1157,45 +1203,58 @@ class TradeManager:
                         time_unit=data['timeUnit']
                     )
                     db.session.add(new_signal)
-                    db.session.flush()  # Flush to assign an ID to new_signal without committing transaction
-                    self.loc.log_or_console(True, "I", "New signal stored", new_signal)
-                else:
-                    self.loc.log_or_console(True, "I", "Duplicate signal detected; not stored", existing_signal)
-                    return  # Skip further processing if it's a duplicate
+                    self.loc.log_or_console(True, "I", "    > Stored new signal", new_signal)
+
+                db.session.commit()  # Commit changes at the end of processing
 
                 next_months_product_id, next_month = self.check_for_contract_expires()
 
                 # Now, get the bid and ask prices for the current futures product
                 relevant_future_product = self.cb_adv_api.get_relevant_future_from_db(month_override=next_month)
-                self.loc.log_or_console(True, "I", " relevant_future_product product_id",
-                                        relevant_future_product.product_id)
+                # self.loc.log_or_console(True, "I", "relevant_future_product product_id",
+                #                         relevant_future_product.product_id)
 
                 # Get the current bid and ask prices for the futures product related to this signal
                 future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(relevant_future_product.product_id)
                 future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
                 future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
 
-                self.loc.log_or_console(True, "I", "next_months_product_id", next_months_product_id)
-                self.loc.log_or_console(True, "I", "next_month", next_month)
+                if next_months_product_id:
+                    self.loc.log_or_console(True, "I",
+                                            "    > next_months_product_id", next_months_product_id)
+                    self.loc.log_or_console(True, "I",
+                                            "    > next_month", next_month)
+
+                if new_signal:
+                    signal_id = new_signal.id
+                else:
+                    signal_id = existing_signal.id
+                self.loc.log_or_console(True, "I", "    > Signal ID", signal_id)
 
                 # Find the related futures product based on the current futures product
-                # Assuming the current futures product maps directly to product_id in your CoinbaseFuture model
                 if relevant_future_product:
-                    # Create a FuturePriceAtSignal record linking the new signal and the futures product
-                    new_future_price = FuturePriceAtSignal(
-                        signal_spot_price=signal_spot_price,
-                        future_bid_price=future_bid_price,
-                        future_ask_price=future_ask_price,
-                        signal_id=new_signal.id if new_signal else existing_signal.id,
-                        future_id=relevant_future_product.id
-                    )
-                    db.session.add(new_future_price)
-                    self.loc.log_or_console(True, "I", "Associated bid/ask prices stored for the signal")
-
-                db.session.commit()
-
+                    existing_future_price_signal = FuturePriceAtSignal.query.filter_by(signal_id=signal_id).first()
+                    if existing_future_price_signal:
+                        # Correct the updating process by setting each field separately
+                        existing_future_price_signal.signal_spot_price = float(signal_spot_price)
+                        existing_future_price_signal.future_bid_price = future_bid_price
+                        existing_future_price_signal.future_ask_price = future_ask_price
+                        existing_future_price_signal.future_id = relevant_future_product.id
+                        self.loc.log_or_console(True, "I", "Updated existing future price signal details")
+                    else:
+                        # If no existing record, create a new one
+                        new_future_price_signal = FuturePriceAtSignal(
+                            signal_id=signal_id,
+                            signal_spot_price=float(signal_spot_price),
+                            future_bid_price=future_bid_price,
+                            future_ask_price=future_ask_price,
+                            future_id=relevant_future_product.id
+                        )
+                        db.session.add(new_future_price_signal)
+                        self.loc.log_or_console(True, "I", "Stored new future price signal")
+                    db.session.commit()
             except db_errors as e:
-                self.loc.log_or_console(True, "E", "Error fetching latest daily signal", str(e))
+                self.loc.log_or_console(True, "E", "    >>> Error fetching latest daily signal", str(e))
                 db.session.rollback()
 
     def get_latest_weekly_signal(self):
@@ -1308,9 +1367,7 @@ class TradeManager:
     @staticmethod
     def calculate_signal_score(signal: str, score: float):
         # self.loc.log_or_console(True, "D", None, ":calculate_signal_score:")
-
         calc_score = 0
-
         # long = BUY
         if signal == "long":
             calc_score += score
@@ -1344,6 +1401,15 @@ class TradeManager:
                                     calc_score, "Holding off.")
             return 'neutral'
 
+    @staticmethod
+    def calculate_adjusted_weight(base_weight, signal_price, future_bid, future_ask):
+        # Calculate average future price
+        average_future_price = (future_bid + future_ask) / 2
+        # Calculate price deviation percentage
+        price_deviation = abs(signal_price - average_future_price) / signal_price
+        # Adjust weight based on price deviation
+        return base_weight * (1 + price_deviation)
+
     def check_all_signals_to_score(self, week_sig, day_sig, twelve_sig, eight_sig, four_sig, hour_sig, fifteen_sig):
         self.loc.log_or_console(True, "D", None, "----------------------------")
         self.loc.log_or_console(True, "D", None, ":check_all_signals_to_score:")
@@ -1371,6 +1437,45 @@ class TradeManager:
         four_hr_weight = int(config['trade.conditions']['four_hr_weight'])
         one_hour_weight = int(config['trade.conditions']['one_hour_weight'])
         fifteen_min_weight = float(config['trade.conditions']['fifteen_min_weight'])
+
+        # Sample data setup
+        # data = {
+        #     "timestamp": ["2024-04-01 02:55:21", "2024-05-02 00:04:34", "2024-05-01 00:02:14", "2024-05-01 00:02:19",
+        #                   "2024-05-02 06:02:35", "2024-05-02 15:02:01", "2024-05-01 20:34:27"],
+        #     "price": [69662.72, 58307.6, 62037.6, 61245, 57463.2, 58583, 61094],
+        #     "signal": ["short", "long", "short", "short", "long", "long", "short"],
+        #     "time_unit": ["1 Week", "4 Hours", "1 Day", "12 Hours", "1 Hour", "15 Minutes", "8 Hours"],
+        #     "future_bid_price": [66295, 61760, 61145, 61120, 58305, 59590, 63247],
+        #     "future_ask_price": [66295, 61785, 61170, 61150, 58330, 59615, 63247]
+        # }
+
+        # df = pd.DataFrame(data)
+
+        # Define weights
+        # weights = {
+        #     "1 Week": 0.25, "1 Day": 0.20, "12 Hours": 0.15, "8 Hours": 0.10,
+        #     "4 Hours": 0.10, "1 Hour": 0.10, "15 Minutes": 0.10
+        # }
+
+        # Calculate average future price and deviations
+        # df['average_future_price'] = (df['future_bid_price'] + df['future_ask_price']) / 2
+        # df['deviation'] = abs(df['price'] - df['average_future_price']) / df['price']
+        # df['weight'] = df['time_unit'].map(weights) * (1 + df['deviation'])
+        # df['direction_score'] = df['signal'].map({'long': 1, 'short': -1})
+        # df['weighted_score'] = df['weight'] * df['direction_score']
+        # print(" >>> average_future_price:", df['average_future_price'])
+        # print(" >>> deviation:", df['deviation'])
+        # print(" >>> weight:", df['weight'])
+        # print(" >>> direction_score:", df['direction_score'])
+        # print(" >>> weighted_score:", df['weighted_score'])
+        #
+        # # Calculate final signal direction
+        # total_score = df['weighted_score'].sum()
+        # print(" >>> total_score:", total_score)
+        #
+        # # Determine market direction
+        # market_direction = "long" if total_score > 0 else "short"
+        # print(" >>> Market Direction:", market_direction)
 
         weekly_ts_formatted = None
         daily_ts_formatted = None
@@ -1402,30 +1507,38 @@ class TradeManager:
             (calculated_score, weekly_ts_formatted) = display_signal_and_calc_signal_score(week_sig,
                                                                                            weekly_weight,
                                                                                            calculated_score)
+            # self.loc.log_or_console(True, "I","   >>> 1W Score", calculated_score)
+
         if day_sig:
             (calculated_score, daily_ts_formatted) = display_signal_and_calc_signal_score(day_sig,
                                                                                           daily_weight,
                                                                                           calculated_score)
+            # self.loc.log_or_console(True, "I", "   >>> 1D Score", calculated_score)
         if twelve_sig:
             (calculated_score, twelve_hour_ts_formatted) = display_signal_and_calc_signal_score(twelve_sig,
                                                                                                 twelve_hr_weight,
                                                                                                 calculated_score)
+            # self.loc.log_or_console(True, "I", "   >>> 12H Score", calculated_score)
         if eight_sig:
             (calculated_score, eight_hour_ts_formatted) = display_signal_and_calc_signal_score(eight_sig,
                                                                                                eight_hr_weight,
                                                                                                calculated_score)
+            # self.loc.log_or_console(True, "I", "   >>> 8H Score", calculated_score)
         if four_sig:
             (calculated_score, four_hour_ts_formatted) = display_signal_and_calc_signal_score(four_sig,
                                                                                               four_hr_weight,
                                                                                               calculated_score)
+            # self.loc.log_or_console(True, "I", "   >>> 4H Score", calculated_score)
         if hour_sig:
             (calculated_score, one_hour_ts_formatted) = display_signal_and_calc_signal_score(hour_sig,
                                                                                              one_hour_weight,
                                                                                              calculated_score)
+            # self.loc.log_or_console(True, "I", "   >>> 1H Score", calculated_score)
         if fifteen_sig:
             (calculated_score, fifteen_min_ts_formatted) = display_signal_and_calc_signal_score(fifteen_sig,
                                                                                                 fifteen_min_weight,
                                                                                                 calculated_score)
+            # self.loc.log_or_console(True, "I", "   >>> 15m Score", calculated_score)
 
         timestamp_obj = {
             "weekly_ts_fmt": weekly_ts_formatted,
@@ -1440,12 +1553,84 @@ class TradeManager:
         # self.loc.log_or_console(True, "I",
         #                         "   >>> Total Trading Score", calculated_score)
 
-        position_trade_direction = self.decide_trade_direction(calculated_score)
+        signal_calc_trade_direction = self.decide_trade_direction(calculated_score)
         # self.loc.log_or_console(True, "I",
         #                         "   >>> Position Trade Direction",
-        #                         position_trade_direction)
+        #                         signal_calc_trade_direction)
 
-        return position_trade_direction, calculated_score, timestamp_obj
+        return signal_calc_trade_direction, calculated_score, timestamp_obj
+
+    @staticmethod
+    def calculate_signal_score_2(signal, weight):
+        # Convert signal to score
+        return weight * (1 if signal == 'long' else -1)
+
+    @staticmethod
+    def query_to_dataframe(query):
+        """ Convert a SQLAlchemy query to a DataFrame. """
+        result = query.all()
+        return pd.read_sql(query.statement, query.session.bind)
+
+    def check_all_signals_to_score_2(self):
+        self.loc.log_or_console(True, "D", None, "----------------------------")
+        self.loc.log_or_console(True, "D", None, ":check_all_signals_to_score_2:")
+
+        # TODO: Add the session queries to the webhook so we update out data.
+
+        # Querying AuroxSignal data
+        query_aurox = session.query(AuroxSignal)
+        aurox_df = self.query_to_dataframe(query_aurox)
+
+        # Convert price from string to float before any calculations
+        aurox_df['price'] = pd.to_numeric(aurox_df['price'], errors='coerce')
+
+        # Querying FuturePriceAtSignal data
+        query_future_price = session.query(FuturePriceAtSignal)
+        future_df = self.query_to_dataframe(query_future_price)
+
+        # Close session after the operations
+        session.close()
+
+        # Merge on signal_id and id
+        combined_df = pd.merge(aurox_df, future_df, left_on='id', right_on='signal_id')
+
+        # Calculate average future price and deviation
+        combined_df['average_future_price'] = (combined_df['future_bid_price'] + combined_df['future_ask_price']) / 2
+        combined_df['price_deviation'] = (abs(combined_df['price'] - combined_df['average_future_price']) /
+                                          combined_df['price'])
+        # Continue with your analysis
+        # print(combined_df)
+
+        # Base weights by time units (hours)
+        base_weights = {
+            '1 Week': int(config['trade.conditions']['weekly_weight']),
+            '1 Day': int(config['trade.conditions']['daily_weight']),
+            '12 Hours': int(config['trade.conditions']['twelve_hr_weight']),
+            '8 Hours': int(config['trade.conditions']['eight_hr_weight']),
+            '4 Hours': int(config['trade.conditions']['four_hr_weight']),
+            '1 Hour': int(config['trade.conditions']['one_hour_weight']),
+            '15 Minutes': float(config['trade.conditions']['fifteen_min_weight'])
+        }
+
+        max_score = (168 + 24 + 12 + 8 + 4 + 1 + 0.25) * 1  # All 'long'
+        min_score = (168 + 24 + 12 + 8 + 4 + 1 + 0.25) * -1  # All 'short'
+        print("LONG max_score:", max_score)
+        print("SHORT min_score:", min_score)
+
+        # Calculate weighted scores
+        combined_df['weight'] = combined_df['time_unit'].map(base_weights)
+        combined_df['adjusted_weight'] = combined_df['weight'] * (1 + combined_df['price_deviation'])
+        combined_df['direction_score'] = combined_df['signal'].apply(lambda x: 1 if x == 'long' else -1)
+        combined_df['weighted_score'] = combined_df['adjusted_weight'] * combined_df['direction_score']
+
+        # Aggregate to find overall direction
+        overall_score = combined_df['weighted_score'].sum()
+        print("Overall Score:", overall_score)
+
+        market_direction = 'long' if overall_score > 0 else 'short'
+        # market_direction = ''
+
+        return market_direction
 
     def compare_last_daily_to_todays_date(self):
         self.loc.log_or_console(True, "I", None, ":compare_last_daily_to_todays_date:")
@@ -1575,9 +1760,14 @@ class TradeManager:
                     next_contact = fp
         return next_contact, next_month
 
-    def ladder_orders(self, quantity: int, side: str, product_id: str, bid_price, ask_price,
-                      manual_price: str = ''):
+    def ladder_orders(self, side: str, product_id: str, bid_price, ask_price,
+                      quantity: int = 5, manual_price: str = ''):
+        self.loc.log_or_console(True, "D", None, "||||||||||||||||||||||||")
         self.loc.log_or_console(True, "D", None, ":ladder_orders:")
+
+        # Prevent more than 10
+        if quantity > 10:
+            quantity = 10
 
         # NOTE: This is part of our strategy in placing DCA limit orders if the trade goes against us,
         #   even though both the Weekly and Daily signals are in our favor. This not only helps
@@ -1600,19 +1790,26 @@ class TradeManager:
             cur_future_price = manual_price
         self.loc.log_or_console(True, "I", "cur_future_price", cur_future_price)
 
-        dca_trade_1_per = float(config['dca.ladder.trade_percentages']['dca_trade_1_per'])
-        dca_trade_2_per = float(config['dca.ladder.trade_percentages']['dca_trade_2_per'])
-        dca_trade_3_per = float(config['dca.ladder.trade_percentages']['dca_trade_3_per'])
-        dca_trade_4_per = float(config['dca.ladder.trade_percentages']['dca_trade_4_per'])
-        dca_trade_5_per = float(config['dca.ladder.trade_percentages']['dca_trade_5_per'])
+        # dca_note_list = ['DCA1', 'DCA2', 'DCA3', 'DCA4', 'DCA5']
+        dca_note_list = ["DCA"+str(x) for x in range(1, quantity+1)]
+        self.loc.log_or_console(True, "I", "    dca_note_list",
+                                dca_note_list)
 
-        dca_note_list = ['DCA1', 'DCA2', 'DCA3', 'DCA4', 'DCA5']
+        # Generate the DCA percentages list dynamically based on 'quantity'
         # dca_per_offset_list = [0.01, 0.02, 0.03, 0.04, 0.05]
-        dca_per_offset_list = [dca_trade_1_per,
-                               dca_trade_2_per,
-                               dca_trade_3_per,
-                               dca_trade_4_per,
-                               dca_trade_5_per]
+        dca_per_offset_list = [
+            float(config['dca.ladder.trade_percentages'][f'dca_trade_{i+1}_per'])
+            for i in range(quantity)
+        ]
+        self.loc.log_or_console(True, "I", "    dca_per_offset_list",
+                                dca_per_offset_list)
+
+        dca_contract_size_list = [
+            str(config['dca.ladder.trade_percentages'][f'dca_trade_{i + 1}_contracts'])
+            for i in range(quantity)
+        ]
+        self.loc.log_or_console(True, "I", "    dca_contract_size_list",
+                                dca_contract_size_list)
 
         def create_dca_orders():
             for i, note in enumerate(dca_note_list):
@@ -1638,10 +1835,12 @@ class TradeManager:
                                                 "   > Sell Short dcg_limit_price: $",
                                                 dcg_limit_price)
 
+                    contract_size = dca_contract_size_list[i]
+
                     # Create DCA Trade
                     dca_order_created = self.cb_adv_api.create_order(side=side,
                                                                      product_id=product_id,
-                                                                     size=size,
+                                                                     size=contract_size,
                                                                      limit_price=dcg_limit_price,
                                                                      leverage=leverage,
                                                                      order_type=order_type,
@@ -1721,13 +1920,14 @@ class TradeManager:
         one_hour_signals = self.get_latest_1_hour_signal()
         fifteen_min_signals = self.get_latest_15_minute_signal()
 
-        position_trade_direction, signal_score, ts_obj = self.check_all_signals_to_score(weekly_signals,
-                                                                                         daily_signals,
-                                                                                         twelve_hour_signals,
-                                                                                         eight_hour_signals,
-                                                                                         four_hour_signals,
-                                                                                         one_hour_signals,
-                                                                                         fifteen_min_signals)
+        signals_list = [weekly_signals, daily_signals, twelve_hour_signals,eight_hour_signals,four_hour_signals,one_hour_signals,fifteen_min_signals]
+
+        signal_calc_trade_direction, signal_score, ts_obj = self.check_all_signals_to_score(weekly_signals, daily_signals, twelve_hour_signals,eight_hour_signals,four_hour_signals,one_hour_signals,fifteen_min_signals)
+
+        # market_direction = self.check_all_signals_to_score_2()
+        # print("market_direction:", market_direction)
+        # print("signal_score_2:", signal_score_2)
+        # print("ts_obj_2:", ts_obj_2)
 
         weekly_ts_formatted = ts_obj['weekly_ts_fmt']
         daily_ts_formatted = ts_obj['daily_ts_fmt']
@@ -1816,8 +2016,13 @@ class TradeManager:
                     )
                     self.loc.log_or_console(True, "I", "    > updated_cancelled_order", updated_cancelled_order)
 
+                # Now, update an other Future Order records setting bot_active = 0
+                self.cb_adv_api.update_bot_active_orders()
+
+            #
             # If our overall position trade direction isn't neutral, then proceed
-            if position_trade_direction != "neutral":
+            #
+            if signal_calc_trade_direction != "neutral":
                 self.loc.log_or_console(True, "I", None,
                                         "-----------------------------------")
                 self.loc.log_or_console(True, "I", None,
@@ -1828,13 +2033,13 @@ class TradeManager:
                 #  last signal and price of when we should place a limit order.
                 #  How are in price are we away from the last signal?
                 #  What is a good price threshold?
-                #  Is 15 Minute signal side the same as the position_trade_direction side?
+                #  Is 15 Minute signal side the same as the signal_calc_trade_direction side?
 
                 fifteen_min_trade_signal = fifteen_min_signals.signal
 
-                # NOTE: Does the 15 Min match the overall trade direction of the Aurox signals?
+                # NOTE: Does the 15 Min match the overall signal trade direction of the Aurox signals?
 
-                if fifteen_min_trade_signal == position_trade_direction:
+                if fifteen_min_trade_signal == signal_calc_trade_direction:
                     self.loc.log_or_console(True, "I", None,
                                             "   >>> YES, the 15 Min matches the overall trade direction")
 
@@ -1870,12 +2075,12 @@ class TradeManager:
 
                     # The signal price should be lower than current price (price rising)
                     check_signal_and_current_price_diff = 0
-                    if position_trade_direction == 'long':
+                    if signal_calc_trade_direction == 'long':
                         check_signal_and_current_price_diff = int(limit_price) - int(fifteen_min_future_avg_price)
                         percentage_diff = round((check_signal_and_current_price_diff
                                                  / int(fifteen_min_future_avg_price)) * 100, 2)
 
-                    elif position_trade_direction == 'short':
+                    elif signal_calc_trade_direction == 'short':
                         check_signal_and_current_price_diff = int(fifteen_min_future_avg_price) - int(limit_price)
                         percentage_diff = round((check_signal_and_current_price_diff
                                                  / int(fifteen_min_future_avg_price)) * 100, 2)
@@ -1885,7 +2090,11 @@ class TradeManager:
 
                     # Set a limit value is here (1 = 1%)
                     # percentage_diff_limit = 1
-                    percentage_diff_limit = int(config['trade.conditions']['percentage_diff_limit'])
+                    percentage_diff_limit = float(config['trade.conditions']['percentage_diff_limit'])
+                    per_diff_msg = (f"   >>> Checking! Signal Direction "
+                                    f"{signal_calc_trade_direction} "
+                                    f" Per Diff {percentage_diff}% < {percentage_diff_limit}% Limit")
+                    self.loc.log_or_console(True, "I", None, per_diff_msg)
 
                     if percentage_diff < percentage_diff_limit:
                         good_per_diff_msg = (f"   >>> Proceeding! current price diff of "
@@ -1897,9 +2106,9 @@ class TradeManager:
 
                         # LONG = BUY
                         # SHORT = SELL
-                        if position_trade_direction == "long":
+                        if signal_calc_trade_direction == "long":
                             trade_side = "BUY"
-                        elif position_trade_direction == "short":
+                        elif signal_calc_trade_direction == "short":
                             trade_side = "SELL"
 
                         size = "1"
@@ -1921,8 +2130,9 @@ class TradeManager:
 
                         # TODO: Need to see if the MAIN order is filled first before placing ladder orders
 
-                        # How many ladder orders?
-                        ladder_order_qty = 5
+                        # How many ladder orders? (10 max)
+                        # ladder_order_qty = 8
+                        ladder_order_qty = int(config['dca.ladder.trade_percentages']['ladder_quantity'])
 
                         # Create the DCA ladder orders
                         self.ladder_orders(quantity=ladder_order_qty,
@@ -1939,12 +2149,12 @@ class TradeManager:
                     self.loc.log_or_console(True, "W", None,
                                             "   >>> NO, the 15 Min does not match the overall trade direction")
                     fifteen_min_pos_trade_dir_msg = (f"     >>> 15 Min Signal: {fifteen_min_trade_signal} "
-                                                     f"!= Position Trade Direction: {position_trade_direction}")
+                                                     f"!= Signal Trade Direction: {signal_calc_trade_direction}")
                     self.loc.log_or_console(True, "W", None,
                                             fifteen_min_pos_trade_dir_msg)
             else:
                 self.loc.log_or_console(True, "W", None,
-                                        "Signal score is neutral, let's wait...")
+                                        "Signal score is neutral, let's wait... Score:", signal_score)
 
                 weekly_msg = f"Weekly Signal: {weekly_signals.signal} | Date: {weekly_ts_formatted}"
                 daily_msg = f"Daily Signal: {daily_signals.signal} | Date: {daily_ts_formatted}"
@@ -2148,9 +2358,8 @@ class TradeManager:
             # NOTE: Find all the FILLED DCA orders to get the average price
 
             dca_avg_filled_price, dca_count = self.cb_adv_api.get_dca_filled_orders_from_db(dca_side=dca_side)
+            self.loc.log_or_console(True, "I", "    DCA Count", dca_count)
             # self.loc.log_or_console(True, "I", "    DCA Avg Filled Price", dca_avg_filled_price)
-            test_dca_avg_filled_price = dca_avg_filled_price / 5
-            print("test_dca_avg_filled_price:", test_dca_avg_filled_price)
 
             avg_filled_price = round((int(order.average_filled_price) + dca_avg_filled_price) / dca_count)
             self.loc.log_or_console(True, "I", "    Avg Filled Price", avg_filled_price)
@@ -2160,7 +2369,7 @@ class TradeManager:
 
             # take_profit_percentage = 0.02
             take_profit_percentage = float(config['take.profit.order']['take_profit_percentage'])
-            tp_per_msg = f" take_profit_percentage: %{take_profit_percentage * 100}"
+            tp_per_msg = f" take_profit_percentage: {take_profit_percentage * 100}%"
             self.loc.log_or_console(True, "I", None, tp_per_msg)
 
             # Calculate the take profit price (Long or Short)

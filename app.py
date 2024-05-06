@@ -14,14 +14,22 @@ import pytz
 import os
 import re
 
-# TODO: Still having issues with storing the Aurox signals, maybe we just
-#  store the latest timeframes?
-# TODO: Switch to MySQL DB from SQLite
-# TODO: Integrate the bot_config values
+# TODO: Update profit loss method with updated DCA method
+# TODO: Might consider calculating two or three separate groups from the higher, mid and
+#   lower timeframes:
+#   Group 1: 10D, 1W, 5D, 3D, 2D, 1D
+#   Group 2: 12H, 8H, 6H, 4H, 3H, 2H
+#   Group 2: 1H, 30m, 20m, 15m 10m, 5m
+# TODO: Since the market closes on holidays and 5PM on Friday's should we limit trading on those days?
+# TODO: Need a way to manually trigger bot to open trade when I want
+# TODO: Need to build a UI (web interface using Vue or Vite)
 # TODO: Do we also create a trailing take profit feature?
 # TODO: Do we need the websocket to watch prices?
-# TODO: Need a way to manually trigger bot to open trade when I want
-# TODO: Need to add more weight to DCA orders, need to increase contract as deeper.
+# TODO: Should we start storing Aurox signals historically again?
+#   Maybe we could formulate better signals diretion or calculation from this
+# TODO: Should we start tracking the 10D, 5D, 4D, 3D, 2D, 30min?
+# TODO: Look into adding a timestamp calculation to our cacl_all_signals_score_for_direction
+# TODO: Look into adding more weight or adjusting the signal weights for better calc
 
 config = configparser.ConfigParser()
 config.read('bot_config.ini')
@@ -386,6 +394,76 @@ def list_and_store_future_orders_job():
 #     # Get Current Positions
 #     future_positions = cbapi.get_future_position(future_contract.product_id)
 #     pp(future_positions)
+
+# @scheduler.task('interval', id='future_positions', seconds=10, misfire_grace_time=900)
+# def get_current_position_job():
+#     loc.log_or_console(True, "I", None, msg1="------------------------------")
+#     loc.log_or_console(True, "I", None, msg1=":get_current_position_job:")
+#
+#     future_contract = cbapi.get_relevant_future_from_db()
+#
+#     # Get Current Positions
+#     future_positions = cbapi.get_future_position(future_contract.product_id)
+#     pp(future_positions)
+
+
+@scheduler.task('interval', id='calc_signals', seconds=10000000, misfire_grace_time=900)
+def run_signal_calc():
+    loc.log_or_console(True, "I", None, msg1="------------------------------")
+    loc.log_or_console(True, "I", None, msg1=":run_signal_calc:")
+
+    weekly_signals = tm.get_latest_weekly_signal()
+    five_day_signals = tm.get_latest_five_day_signal()
+    three_day_signals = tm.get_latest_three_day_signal()
+    two_day_signals = tm.get_latest_two_day_signal()
+    daily_signals = tm.get_latest_daily_signal()
+    twelve_hour_signals = tm.get_latest_12_hour_signal()
+    eight_hour_signals = tm.get_latest_8_hour_signal()
+    six_hour_signals = tm.get_latest_6_hour_signal()
+    four_hour_signals = tm.get_latest_4_hour_signal()
+    three_hour_signals = tm.get_latest_3_hour_signal()
+    two_hour_signals = tm.get_latest_2_hour_signal()
+    one_hour_signals = tm.get_latest_1_hour_signal()
+    thirty_min_signals = tm.get_latest_30_minute_signal()
+    twenty_min_signals = tm.get_latest_20_minute_signal()
+    fifteen_min_signals = tm.get_latest_15_minute_signal()
+    ten_min_signals = tm.get_latest_10_minute_signal()
+    five_min_signals = tm.get_latest_5_minute_signal()
+
+    # Group 1: 1W, 5D, 3D, 2D, 1D, 12H,
+    # Group 2: 8H, 6H, 4H, 3H, 2H, 1H
+    # Group 2: 30m, 20m, 15m 10m, 5m
+
+    signal_dict = {
+        "group1": {
+            "weekly": weekly_signals,
+            "five_day": five_day_signals,
+            "three_day": three_day_signals,
+            "two_day": two_day_signals,
+            "daily": daily_signals,
+            "twelve_hr": twelve_hour_signals,
+        },
+        "group2": {
+            "eight_hr": eight_hour_signals,
+            "six_hr": six_hour_signals,
+            "four_hr": four_hour_signals,
+            "three_hr": three_hour_signals,
+            "two_hr": two_hour_signals,
+            "one_hour": one_hour_signals,
+        },
+        "group3": {
+            "thirty_min": thirty_min_signals,
+            "twenty_min": twenty_min_signals,
+            "fifteen_min": fifteen_min_signals,
+            "ten_min": ten_min_signals,
+            "five_min": five_min_signals
+        }
+    }
+
+    total_grp_dir_val, total_strength_trade = tm.calc_all_signals_score_for_dir_new(signal_dict)
+    loc.log_or_console(True, "I", "   >>> Total Direction Val & Strength",
+                       total_grp_dir_val, total_strength_trade)
+
 
 scheduler.init_app(app)
 scheduler.start()

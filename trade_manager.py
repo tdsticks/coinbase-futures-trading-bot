@@ -36,561 +36,6 @@ class TradeManager:
 
         self.log.log(True, "D", None, ":Initializing TradeManager:")
 
-    def get_latest_weekly_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_weekly_signal:")
-
-        with self.flask_app.app_context():
-            # Query the latest weekly signal including related future price data
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '1 Week') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_five_day_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_five_day_signal:")
-
-        with self.flask_app.app_context():
-
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '5 Days') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_three_day_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_three_day_signal:")
-
-        with self.flask_app.app_context():
-
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '3 Days') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_two_day_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_two_day_signal:")
-
-        with self.flask_app.app_context():
-
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '2 Days') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_daily_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_daily_signal:")
-
-        with self.flask_app.app_context():
-
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '1 Day') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_12_hour_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_12_hourly_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '12 Hours') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_8_hour_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_8_hourly_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '8 Hours') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_6_hour_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_6_hour_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '6 Hours') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_4_hour_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_4_hourly_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '4 Hours') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_3_hour_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_3_hour_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '3 Hours') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_2_hour_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_2_hour_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '2 Hours') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_1_hour_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_1_hour_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '1 Hour') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_30_minute_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_30_minute_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '30 Minutes') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_20_minute_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_20_minute_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '20 Minutes') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_15_minute_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_15_minute_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '15 Minutes') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_10_minute_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_10_minute_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '10 Minutes') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    def get_latest_5_minute_signal(self):
-        # self.log.log(True, "D", None,
-        #                         ":get_latest_5_minute_signal:")
-
-        with self.flask_app.app_context():
-            latest_signal = AuroxSignal.query \
-                .options(joinedload(AuroxSignal.future_prices)) \
-                .filter(AuroxSignal.time_unit == '5 Minutes') \
-                .order_by(AuroxSignal.timestamp.desc()) \
-                .first()
-            if latest_signal:
-                return latest_signal
-            else:
-                return None
-
-    @staticmethod
-    def calculate_signal_score(signal: str, score: float):
-        # self.log.log(True, "D", None, ":calculate_signal_score:")
-        calc_score = 0
-        # long = BUY
-        if signal == "long":
-            calc_score += score
-        # short = SELL
-        elif signal == "short":
-            calc_score -= score
-        return calc_score
-
-    def decide_trade_direction(self, calc_score):
-        # self.log.log(True, "D", None, ":decide_trade_direction:")
-
-        # Define thresholds for long and short decisions
-        # long_threshold = 100
-        # short_threshold = -100
-        long_threshold = int(config['trade.conditions']['trade_direction_long_threshold'])
-        short_threshold = int(config['trade.conditions']['trade_direction_short_threshold'])
-
-        if calc_score >= long_threshold:
-            self.log.log(True, "I",
-                         "   >>> Strong bullish sentiment detected with a score of",
-                         calc_score, "Going long.")
-            return 'long'
-        elif calc_score <= short_threshold:
-            self.log.log(True, "I",
-                         "   >>> Strong bearish sentiment detected with a score of",
-                         calc_score, "Going short.")
-            return 'short'
-        elif long_threshold > calc_score > short_threshold:
-            self.log.log(True, "I",
-                         "   >>> Neutral sentiment detected with a score of",
-                         calc_score, "Holding off.")
-            return 'neutral'
-
-    def decide_trade_direction_new(self, calc_score, long_threshold_str, short_threshold_str):
-        # self.log.log(True, "D", None, ":decide_trade_direction_new:")
-
-        direction = 'neutral'
-        dir_value = 0
-
-        # Define thresholds for long and short decisions
-        long_threshold = float(config['trade.conditions'][long_threshold_str])
-        short_threshold = float(config['trade.conditions'][short_threshold_str])
-
-        # decide_msg = f"Long: {long_threshold} Short: {short_threshold}"
-        # self.log.log(True, "I", "   > Trading Thresholds", decide_msg)
-        # self.log.log(True, "I", "   >    Calc Score", calc_score)
-
-        if calc_score >= long_threshold:
-            # self.log.log(True, "I",
-            #                         "   >>> Strong bullish sentiment detected with a score of",
-            #                         calc_score, "Going long.")
-            direction = 'long'
-            dir_value = 1
-        elif calc_score <= short_threshold:
-            # self.log.log(True, "I",
-            #                         "   >>> Strong bearish sentiment detected with a score of",
-            #                         calc_score, "Going short.")
-            direction = 'short'
-            dir_value = -1
-        elif long_threshold > calc_score > short_threshold:
-            # self.log.log(True, "I",
-            #                         "   >>> Neutral sentiment detected with a score of",
-            #                         calc_score, "Holding off.")
-            direction = 'neutral'
-            dir_value = 0
-
-        return direction, dir_value
-
-    def decide_direction_strength(self, p_total_grp_dir_val):
-        # self.log.log(True, "D", None, ":decide_direction_strength:")
-
-        if p_total_grp_dir_val >= 3:
-            trade_value = 'STRONG_LONG'
-        elif p_total_grp_dir_val >= 2:
-            trade_value = 'MODERATE_LONG'
-        elif p_total_grp_dir_val >= 1:
-            trade_value = 'WEAK_LONG'
-        elif p_total_grp_dir_val <= -3:
-            trade_value = 'STRONG_SHORT'
-        elif p_total_grp_dir_val <= -2:
-            trade_value = 'MODERATE_SHORT'
-        elif p_total_grp_dir_val <= -1:
-            trade_value = 'WEAK_SHORT'
-        else:
-            trade_value = 'NEUTRAL'
-
-        # self.log.log(True, "I","   >>> Group Direction Value:", p_total_grp_dir_val)
-        return trade_value
-
-    def calc_all_signals_score_for_direction(self, week_sig, day_sig, twelve_sig, eight_sig, four_sig,
-                                             hour_sig, fifteen_sig):
-        self.log.log(True, "D", None, "----------------------------")
-        self.log.log(True, "D", None, ":calc_all_signals_score_for_direction:")
-
-        # NOTE: Created a scoring systems based on the signal timeframes. If the score is
-        #   high or low enough based on the market direction (long or short), then we may
-        #   be safer to trade in a particular direction
-
-        calculated_score = 0
-
-        # REVIEW: Should we adjust the weight of these values? using hours currently
-
-        weekly_weight = int(config['trade.conditions']['weekly_weight'])
-        daily_weight = int(config['trade.conditions']['daily_weight'])
-        twelve_hr_weight = int(config['trade.conditions']['twelve_hr_weight'])
-        eight_hr_weight = int(config['trade.conditions']['eight_hr_weight'])
-        four_hr_weight = int(config['trade.conditions']['four_hr_weight'])
-        one_hour_weight = int(config['trade.conditions']['one_hour_weight'])
-        fifteen_min_weight = float(config['trade.conditions']['fifteen_min_weight'])
-
-        weekly_ts_formatted = None
-        daily_ts_formatted = None
-        twelve_hour_ts_formatted = None
-        eight_hour_ts_formatted = None
-        four_hour_ts_formatted = None
-        one_hour_ts_formatted = None
-        fifteen_min_ts_formatted = None
-
-        def display_signal_and_calc_signal_score(signal_record, weight, p_calc_score):
-            # future_avg_price = 0
-            # for future_price_data in signal_record.future_prices:
-            #     signal_future_bid_price = future_price_data.future_bid_price
-            #     signal_future_ask_price = future_price_data.future_ask_price
-            #     future_avg_price = (signal_future_bid_price + signal_future_ask_price) / 2
-
-            signals_dt = signal_record.timestamp
-            ts_formatted = signals_dt.strftime("%B %d, %Y, %I:%M %p")
-
-            # msg = (f"   > {signal_record.time_unit} - Signal: {signal_record.signal} "
-            #        f"| Date: {ts_formatted} "
-            #        f"| Avg Future Price: ${future_avg_price}")
-            # self.log.log(True, "D", None, msg)
-
-            p_calc_score += self.calculate_signal_score(signal_record.signal, weight)
-            return p_calc_score, ts_formatted
-
-        if week_sig:
-            (calculated_score, weekly_ts_formatted) = display_signal_and_calc_signal_score(week_sig,
-                                                                                           weekly_weight,
-                                                                                           calculated_score)
-            # self.log.log(True, "I","   >>> 1W Score", calculated_score)
-        if day_sig:
-            (calculated_score, daily_ts_formatted) = display_signal_and_calc_signal_score(day_sig,
-                                                                                          daily_weight,
-                                                                                          calculated_score)
-            # self.log.log(True, "I", "   >>> 1D Score", calculated_score)
-        if twelve_sig:
-            (calculated_score, twelve_hour_ts_formatted) = display_signal_and_calc_signal_score(twelve_sig,
-                                                                                                twelve_hr_weight,
-                                                                                                calculated_score)
-            # self.log.log(True, "I", "   >>> 12H Score", calculated_score)
-        if eight_sig:
-            (calculated_score, eight_hour_ts_formatted) = display_signal_and_calc_signal_score(eight_sig,
-                                                                                               eight_hr_weight,
-                                                                                               calculated_score)
-            # self.log.log(True, "I", "   >>> 8H Score", calculated_score)
-        if four_sig:
-            (calculated_score, four_hour_ts_formatted) = display_signal_and_calc_signal_score(four_sig,
-                                                                                              four_hr_weight,
-                                                                                              calculated_score)
-            # self.log.log(True, "I", "   >>> 4H Score", calculated_score)
-        if hour_sig:
-            (calculated_score, one_hour_ts_formatted) = display_signal_and_calc_signal_score(hour_sig,
-                                                                                             one_hour_weight,
-                                                                                             calculated_score)
-            # self.log.log(True, "I", "   >>> 1H Score", calculated_score)
-        if fifteen_sig:
-            (calculated_score, fifteen_min_ts_formatted) = display_signal_and_calc_signal_score(fifteen_sig,
-                                                                                                fifteen_min_weight,
-                                                                                                calculated_score)
-            # self.log.log(True, "I", "   >>> 15m Score", calculated_score)
-
-        timestamp_obj = {
-            "weekly_ts_fmt": weekly_ts_formatted,
-            "daily_ts_fmt": daily_ts_formatted,
-            "twelve_hr_ts_fmt": twelve_hour_ts_formatted,
-            "eight_hr_ts_fmt": eight_hour_ts_formatted,
-            "four_hr_ts_fmt": four_hour_ts_formatted,
-            "one_hr_ts_fmt": one_hour_ts_formatted,
-            "fifteen_min_ts_fmt": fifteen_min_ts_formatted,
-        }
-
-        # self.log.log(True, "I",
-        #                         "   >>> Total Trading Score", calculated_score)
-
-        signal_calc_trade_direction = self.decide_trade_direction(calculated_score)
-        # self.log.log(True, "I",
-        #                         "   >>> Position Trade Direction",
-        #                         signal_calc_trade_direction)
-
-        return signal_calc_trade_direction, calculated_score, timestamp_obj
-
-    def calc_all_signals_score_for_dir_new(self, signals_dict):
-        self.log.log(True, "D", None, "----------------------------")
-        self.log.log(True, "D", None, ":calc_all_signals_score_for_dir_new:")
-
-        # NOTE: Created a scoring systems based on the signal timeframes. If the score is
-        #   high or low enough based on the market direction (long or short), then we may
-        #   be safer to trade in a particular direction
-
-        # REVIEW: Should we adjust the weight of these values? using hours currently
-
-        grp1_calc_score = 0
-        grp2_calc_score = 0
-        grp3_calc_score = 0
-        grp1_max = 0
-        grp2_max = 0
-        grp3_max = 0
-
-        # Loop through all of group 1 (higher timeframes) and calculate the signal weight together
-        for time_frame, signal in signals_dict["group1"].items():
-            if signal:
-                signal_weight = float(config['trade.conditions'][f'{time_frame}_weight'])
-                grp1_calc_score += self.calculate_signal_score(signal.signal, signal_weight)
-                grp1_max += signal_weight
-                signal_dir = 1 if signal.signal == 'long' else -1
-                # msg = f" {time_frame} - Signal: {signal.signal} Weight: {signal_weight * signal_dir}"
-                # self.log.log(True, "I", "   > Group 1 Signals", msg)
-
-        # Loop through all of group 2 (middle timeframes) and calculate the signal weight together
-        for time_frame, signal in signals_dict["group2"].items():
-            if signal:
-                signal_weight = float(config['trade.conditions'][f'{time_frame}_weight'])
-                grp2_calc_score += self.calculate_signal_score(signal.signal, signal_weight)
-                grp2_max += signal_weight
-                signal_dir = 1 if signal.signal == 'long' else -1
-                # msg = f" {time_frame} - Signal: {signal.signal} Weight: {signal_weight * signal_dir}"
-                # self.log.log(True, "I", "   > Group 2 Signals", msg)
-
-        # Loop through all of group 3 (lower timeframes) and calculate the signal weight together
-        for time_frame, signal in signals_dict["group3"].items():
-            if signal:
-                signal_weight = float(config['trade.conditions'][f'{time_frame}_weight'])
-                grp3_calc_score += self.calculate_signal_score(signal.signal, signal_weight)
-                grp3_calc_score = round(grp3_calc_score, 3)
-                grp3_max += signal_weight
-                signal_dir = 1 if signal.signal == 'long' else -1
-                # msg = f" {time_frame} - Signal: {signal.signal} Weight: {signal_weight * signal_dir}"
-                # self.log.log(True, "I", "   > Group 3 Signals", msg)
-
-        # Log out the signal weights min and max, plus calculated score
-        grp1_msg = f"Max: {grp1_max} | Score {grp1_calc_score} | Min: {-grp1_max}"
-        self.log.log(True, "I", "   > Group 1", grp1_msg)
-
-        grp2_msg = f"Max: {grp2_max} | Score {grp2_calc_score} | Min: {-grp2_max}"
-        self.log.log(True, "I", "   > Group 2", grp2_msg)
-
-        grp3_msg = f"Max: {grp3_max} | Score {grp3_calc_score} | Min: {-grp3_max}"
-        self.log.log(True, "I", "   > Group 3", grp3_msg)
-
-        # Get the general trade direction, plus set a direction value
-        grp1_direction, grp1_dir_val = self.decide_trade_direction_new(grp1_calc_score,
-                                                                       'group_1_direction_long',
-                                                                       'group_1_direction_short')
-
-        grp2_direction, grp2_dir_val = self.decide_trade_direction_new(grp2_calc_score,
-                                                                       'group_2_direction_long',
-                                                                       'group_2_direction_short')
-
-        grp3_direction, grp3_dir_val = self.decide_trade_direction_new(grp3_calc_score,
-                                                                       'group_3_direction_long',
-                                                                       'group_3_direction_short')
-        # self.log.log(True, "I", "   > Group 1 Direction Val",
-        #                         grp1_direction, grp1_dir_val)
-        # self.log.log(True, "I", "   > Group 2 Direction Val",
-        #                         grp2_direction, grp2_dir_val)
-        # self.log.log(True, "I", "   > Group 3 Direction Val",
-        #                         grp3_direction, grp3_dir_val)
-
-        # TODO: we're using the 1, -1, 0 for each group, but the method is designed for total value
-
-        grp1_strength_trade_val = self.decide_direction_strength(grp1_dir_val)
-        self.log.log(True, "I", "   >>> Group 1 (HTF) Strength Trade Value",
-                     grp1_strength_trade_val, grp1_dir_val)
-
-        grp2_strength_trade_val = self.decide_direction_strength(grp2_dir_val)
-        self.log.log(True, "I", "   >>> Group 2 (MTF) Strength Trade Value",
-                     grp2_strength_trade_val, grp2_dir_val)
-
-        grp3_strength_trade_val = self.decide_direction_strength(grp3_dir_val)
-        self.log.log(True, "I", "   >>> Group 3 (LTF) Strength Trade Value",
-                     grp3_strength_trade_val, grp3_dir_val)
-
-        total_grp_dir_value = grp1_dir_val + grp2_dir_val + grp3_dir_val
-        # self.log.log(True, "I", "   >>> Total Group Direction Value", total_grp_dir_value)
-
-        total_strength_trade_val = self.decide_direction_strength(total_grp_dir_value)
-        # self.log.log(True, "I", "   >>> Total Strength Trade Value", total_strength_trade_val)
-
-        return total_grp_dir_value, total_strength_trade_val
-
     def compare_last_daily_to_todays_date(self):
         self.log.log(True, "I", None, ":compare_last_daily_to_todays_date:")
 
@@ -871,32 +316,14 @@ class TradeManager:
         # print("Future Positions:")
         # pp(future_positions)
 
-        weekly_signals = self.get_latest_weekly_signal()
-        daily_signals = self.get_latest_daily_signal()
-        twelve_hour_signals = self.get_latest_12_hour_signal()
-        eight_hour_signals = self.get_latest_8_hour_signal()
-        four_hour_signals = self.get_latest_4_hour_signal()
-        one_hour_signals = self.get_latest_1_hour_signal()
-        fifteen_min_signals = self.get_latest_15_minute_signal()
+        fifteen_min_signals = self.signal_processor.get_latest_fifteen_min_signal()
 
-        signal_calc_trade_direction, signal_score, ts_obj = self.calc_all_signals_score_for_direction(weekly_signals,
-                                                                                                      daily_signals,
-                                                                                                      twelve_hour_signals,
-                                                                                                      eight_hour_signals,
-                                                                                                      four_hour_signals,
-                                                                                                      one_hour_signals,
-                                                                                                      fifteen_min_signals)
-
-        trade_worthy = self.signal_processor.run()
-        self.log.log(True, "I", " >>> Trade Worthy?", trade_worthy)
-
-        # weekly_ts_formatted = ts_obj['weekly_ts_fmt']
-        # daily_ts_formatted = ts_obj['daily_ts_fmt']
-        # twelve_hour_ts_formatted = ts_obj['twelve_hr_ts_fmt']
-        # eight_hour_ts_formatted = ts_obj['eight_hr_ts_fmt']
-        # four_hour_ts_formatted = ts_obj['four_hr_ts_fmt']
-        # one_hour_ts_formatted = ts_obj['one_hr_ts_fmt']
-        # fifteen_min_ts_formatted = ts_obj['fifteen_min_ts_fmt']
+        trading_permitted, trade_direction, groups = self.signal_processor.run()
+        self.log.log(True, "I", " >>> Trade Permitted", trading_permitted)
+        self.log.log(True, "I", " >>> Trade Direction", trade_direction)
+        # self.log.log(True, "I", " >>> Group Data", groups)
+        # for group in groups:
+        #     self.log.log(True, "I", " >>> Group Data", groups[group])
 
         # Make sure we have a future position
         if len(future_positions['positions']) > 0:
@@ -943,7 +370,7 @@ class TradeManager:
             self.log.log(True, "I", None,
                          " >>> Check if its a good market to place a trade")
 
-            # NOTE: Check to cancel any OPEN orders
+            # NOTE: Check to cancel any OPEN orders and cancel them
 
             future_contract = self.cb_adv_api.get_relevant_future_from_db()
             remaining_open_orders = self.cb_adv_api.list_orders(product_id=future_contract.product_id,
@@ -983,12 +410,17 @@ class TradeManager:
             #
             # If our overall position trade direction isn't neutral, then proceed
             #
-            if signal_calc_trade_direction != "neutral":
+            if trade_direction != "neutral":
                 self.log.log(True, "I", None,
                              "-----------------------------------")
-                self.log.log(True, "I", None,
-                             " >>> Signals are strong either bullish or bearish, "
-                             "see if we should place a trade")
+                if trade_direction == 'long':
+                    self.log.log(True, "I", None,
+                                 " >>> Signals are strong bullish, "
+                                 "see if we should place a trade on the 15 min")
+                else:
+                    self.log.log(True, "I", None,
+                                 " >>> Signals are strong bearish, "
+                                 "see if we should place a trade on the 15 min")
 
                 # NOTE: Next, let's look at the fifteen minute and how close to the
                 #  last signal and price of when we should place a limit order.
@@ -997,10 +429,12 @@ class TradeManager:
                 #  Is 15 Minute signal side the same as the signal_calc_trade_direction side?
 
                 fifteen_min_trade_signal = fifteen_min_signals.signal
+                self.log.log(True, "I", None," >>> 15 Min Signal Direction", fifteen_min_trade_signal)
+                self.log.log(True, "I", None," >>> Trade Signal Direction", trade_direction)
 
                 # NOTE: Does the 15 Min match the overall signal trade direction of the Aurox signals?
 
-                if fifteen_min_trade_signal == signal_calc_trade_direction:
+                if fifteen_min_trade_signal == trade_direction:
                     self.log.log(True, "I", None,
                                  "   >>> YES, the 15 Min matches the overall trade direction")
 
@@ -1034,14 +468,20 @@ class TradeManager:
                     # Just setting a high default number to check again
                     percentage_diff = 10
 
+                    # LONG = BUY
+                    # SHORT = SELL
+                    trade_side = ""
+
                     # The signal price should be lower than current price (price rising)
                     check_signal_and_current_price_diff = 0
-                    if signal_calc_trade_direction == 'long':
+                    if trade_direction == 'long':
+                        trade_side = "BUY"
                         check_signal_and_current_price_diff = int(limit_price) - int(fifteen_min_future_avg_price)
                         percentage_diff = round((check_signal_and_current_price_diff
                                                  / int(fifteen_min_future_avg_price)) * 100, 2)
 
-                    elif signal_calc_trade_direction == 'short':
+                    elif trade_direction == 'short':
+                        trade_side = "SELL"
                         check_signal_and_current_price_diff = int(fifteen_min_future_avg_price) - int(limit_price)
                         percentage_diff = round((check_signal_and_current_price_diff
                                                  / int(fifteen_min_future_avg_price)) * 100, 2)
@@ -1053,7 +493,7 @@ class TradeManager:
                     # percentage_diff_limit = 1
                     percentage_diff_limit = float(config['trade.conditions']['percentage_diff_limit'])
                     per_diff_msg = (f"   >>> Checking! Signal Direction "
-                                    f"{signal_calc_trade_direction} "
+                                    f"{trade_direction} "
                                     f" Per Diff {percentage_diff}% < {percentage_diff_limit}% Limit")
                     self.log.log(True, "I", None, per_diff_msg)
 
@@ -1062,15 +502,6 @@ class TradeManager:
                                              f"{check_signal_and_current_price_diff} "
                                              f"which is {percentage_diff}%")
                         self.log.log(True, "W", None, good_per_diff_msg)
-
-                        trade_side = ""
-
-                        # LONG = BUY
-                        # SHORT = SELL
-                        if signal_calc_trade_direction == "long":
-                            trade_side = "BUY"
-                        elif signal_calc_trade_direction == "short":
-                            trade_side = "SELL"
 
                         size = "1"
                         leverage = "3"
@@ -1110,27 +541,21 @@ class TradeManager:
                     self.log.log(True, "W", None,
                                  "   >>> NO, the 15 Min does not match the overall trade direction")
                     fifteen_min_pos_trade_dir_msg = (f"     >>> 15 Min Signal: {fifteen_min_trade_signal} "
-                                                     f"!= Signal Trade Direction: {signal_calc_trade_direction}")
+                                                     f"!= Signal Trade Direction: {trade_direction}")
                     self.log.log(True, "W", None,
                                  fifteen_min_pos_trade_dir_msg)
             else:
                 self.log.log(True, "W", None,
-                             "Signal score is neutral, let's wait... Score:", signal_score)
+                             "\nSignal score is neutral, let's wait...",)
+                for group in groups:
+                    self.log.log(True, "I", "   >>> ", group, "\n")
+                    self.log.log(True, "I", "       > Direction", groups[group]['direction'], "\n")
+                    self.log.log(True, "I", "       > Strength", groups[group]['strength'], "\n")
+                    self.log.log(True, "I", "       > Score", groups[group]['score'], "\n")
+                    self.log.log(True, "I", "       > Normalized Score",
+                                 groups[group]['normalized_score'], "\n")
+                    self.log.log(True, "I", "\n")
 
-                # weekly_msg = f"Weekly Signal: {weekly_signals.signal} | Date: {weekly_ts_formatted}"
-                # daily_msg = f"Daily Signal: {daily_signals.signal} | Date: {daily_ts_formatted}"
-                # twelve_msg = f"12 Hr Signal: {twelve_hour_signals.signal} | Date: {twelve_hour_ts_formatted}"
-                # eight_msg = f"8 Hr Signal: {eight_hour_signals.signal} | Date: {eight_hour_ts_formatted}"
-                # four_msg = f"4 Hr Signal: {four_hour_signals.signal} | Date: {four_hour_ts_formatted}"
-                # hour_msg = f"1 Hr Signal: {one_hour_signals.signal} | Date: {one_hour_ts_formatted}"
-                # fifteen_msg = f"15 Min Signal: {fifteen_min_signals.signal} | Date: {fifteen_min_ts_formatted}"
-                # self.log.log(True, "W", None, weekly_msg)
-                # self.log.log(True, "W", None, daily_msg)
-                # self.log.log(True, "W", None, twelve_msg)
-                # self.log.log(True, "W", None, eight_msg)
-                # self.log.log(True, "W", None, four_msg)
-                # self.log.log(True, "W", None, hour_msg)
-                # self.log.log(True, "W", None, fifteen_msg)
 
     def tracking_current_position_profit_loss(self, position, order, next_month):
         self.log.log(True, "D", None, "---------------------------------------")

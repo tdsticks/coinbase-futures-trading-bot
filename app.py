@@ -416,16 +416,6 @@ def list_and_store_future_orders_job():
 #     pp(future_positions)
 
 
-# @scheduler.task('interval', id='calc_signals', seconds=30, misfire_grace_time=900)
-# def run_signal_calc():
-#     log.log(True, "I", None, msg1="------------------------------")
-#     log.log(True, "I", None, msg1=":run_signal_calc:")
-
-    # signal_processor = SignalProcessor(app, tm)
-    # trade_worthy = signal_processor.run()
-    # log.log(True, "I", " >>> Trade Worthy?", trade_worthy)
-
-
 scheduler.init_app(app)
 scheduler.start()
 

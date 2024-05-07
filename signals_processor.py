@@ -91,7 +91,7 @@ class SignalProcessor:
                 # Now, get the bid and ask prices for the current futures product
                 relevant_future_product = self.cb_adv_api.get_relevant_future_from_db(month_override=next_month)
                 self.log.log(True, "I", "relevant_future_product product_id",
-                                        relevant_future_product.product_id)
+                             relevant_future_product.product_id)
 
                 # Get the current bid and ask prices for the futures product related to this signal
                 future_bid_price = 0
@@ -459,19 +459,22 @@ class SignalProcessor:
         elif time_frame in ['thirty_min', 'twenty_min', 'fifteen_min', 'ten_min', 'five_min']:
             return 'group3'
 
-    @staticmethod
-    def decide_direction_strength(normalized_score):
+    # @staticmethod
+    def decide_direction_strength(self, normalized_score):
 
-        # TODO: Add these normalization thresholds to the bot_config.ini
+        strong = float(self.config['trade.conditions']['strong'])  # 0.5
+        moderate = float(self.config['trade.conditions']['moderate'])  # 0.2
+        neutral = float(self.config['trade.conditions']['neutral'])  # 0
 
-        # Check for strong strength, where absolute value is needed to account for both positive and negative scores
-        if normalized_score >= 0.5 or normalized_score <= -0.5:
+        # Check for strong strength, where absolute value is needed to account
+        #  for both positive and negative scores
+        if normalized_score >= strong or normalized_score <= -strong:
             return 'STRONG'
         # Check for moderate strength, again using absolute value for both sides
-        elif normalized_score >= 0.2 or normalized_score <= -0.2:
+        elif normalized_score >= moderate or normalized_score <= -moderate:
             return 'MODERATE'
         # Check for weak strength - non-zero but within the moderate range
-        elif 0 < normalized_score < 0.2 or -0.2 < normalized_score < 0:
+        elif neutral < normalized_score < moderate or -moderate < normalized_score < neutral:
             return 'WEAK'
         # Neutral is exactly zero
         elif normalized_score == 0:
@@ -485,13 +488,13 @@ class SignalProcessor:
         # Group 2 TF = Mid-level Timeframes
         # Group 3 TF = Lower Timeframes
 
-        trade_worthy = False
+        trading_permitted = False
 
         grp1_msg = f"Grp 1 Dir: {group1['direction']} | Strength: {group1['strength']}"
         grp2_msg = f"Grp 2 Dir: {group2['direction']} | Strength: {group2['strength']}"
         grp3_msg = f"Grp 3 Dir: {group3['direction']} | Strength: {group3['strength']}"
 
-        msg = (f"Not a good time to trade!"
+        msg = (f"NOT a good time to trade!"
                f"\n > Group 1: {grp1_msg} "
                f"\n > Group 2: {grp2_msg} "
                f"\n > Group 3: {grp3_msg}")
@@ -499,28 +502,33 @@ class SignalProcessor:
         # If all three TF groups are in the same direct and a STRONG OR MODERATE lower TF strength
         if group3['direction'] == group2['direction'] == group1['direction']:
             if group3['strength'] == 'STRONG' or group3['strength'] == 'MODERATE':
-                msg = f"Higher, Mid-level and Lower are same direction with lower strength of: {group3['strength']}"
-                trade_worthy = True
+                msg = (f"Higher, Mid-level and Lower are same direction with lower strength of: {group3['strength']}"
+                       f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
+                trading_permitted = True
 
         # Check the Mid TF and Lower TF direction first and a STRONG lower TF strength
         elif group2['direction'] == group3['direction'] and group3['strength'] == 'STRONG':
-            msg = f"Mid-level and Lower are same direction with lower strength of: {group3['strength']}"
-            trade_worthy = True
+            msg = (f"Mid-level and Lower are same direction with lower strength of: {group3['strength']}"
+                   f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
+            trading_permitted = True
 
         # Now, check the High TF and Lower TF direction second and a STRONG lower TF strength
         elif group3['direction'] == group1['direction'] and group3['strength'] == 'STRONG':
-            msg = f"Higher and Lower are same direction with lower strength of: {group3['strength']}"
-            trade_worthy = True
+            msg = (f"Higher and Lower are same direction with lower strength of: {group3['strength']}"
+                   f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
+            trading_permitted = True
 
-        self.log.log(True, "I", "Should I enter a trade message", msg)
-        return trade_worthy
+        self.log.log(True, "I", "Trading Message", msg)
+        return trading_permitted
 
     def run(self):
         self.fetch_signals()
         scores, max_scores = self.calculate_scores()
+        groups = {}
         group1 = {}
         group2 = {}
         group3 = {}
+        trade_direction = 'Neutral'
 
         for group, score in scores.items():
             # print(f"\n Group: {group} Score: {score}")
@@ -539,21 +547,37 @@ class SignalProcessor:
             if group == 'group1':
                 group1['direction'] = direction
                 group1['strength'] = strength
+                group1['score'] = score
+                group1['normalized_score'] = normalized_score
             elif group == 'group2':
                 group2['direction'] = direction
                 group2['strength'] = strength
+                group2['score'] = score
+                group2['normalized_score'] = normalized_score
             elif group == 'group3':
                 group3['direction'] = direction
                 group3['strength'] = strength
+                group3['score'] = score
+                group3['normalized_score'] = normalized_score
 
-        trade_worthy = self.should_enter_trade(group1, group2, group3)
-        # self.log.log(True, "I", " >>> Trade Worthy?", trade_worthy)
+        groups["group1"] = group1
+        groups["group2"] = group2
+        groups["group3"] = group3
 
-        return trade_worthy
+        trading_permitted = self.should_enter_trade(group1, group2, group3)
+        # self.log.log(True, "I", " >>> Trade Permitted", trading_permitted)
+
+        if trading_permitted:
+            trade_direction = group3['direction']
+
+        return trading_permitted, trade_direction, groups
 
 # Usage
 # TradeManager class
 # app = flask_app
-# tm = TradeManager()
-# signal_processor = SignalProcessor(app, tm)
-# signal_processor.run()
+# tm = TradeManager(app)
+# cb_adv_api = CoinbaseAdvAPI(app)
+
+# Signal Process runs within the Trade Manager Class above
+# self.signal_processor = SignalProcessor(app, cb_adv_api)
+# self.signal_processor.run()

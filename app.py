@@ -5,7 +5,9 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 from db import db
 from pprint import pprint as pp
-from trade_manager import LogOrConsole
+
+from signals_processor import SignalProcessor
+from trade_manager import Log
 from trade_manager import CoinbaseAdvAPI
 from trade_manager import TradeManager
 from flask_apscheduler import APScheduler
@@ -15,21 +17,16 @@ import os
 import re
 
 # TODO: Update profit loss method with updated DCA method
-# TODO: Might consider calculating two or three separate groups from the higher, mid and
-#   lower timeframes:
-#   Group 1: 10D, 1W, 5D, 3D, 2D, 1D
-#   Group 2: 12H, 8H, 6H, 4H, 3H, 2H
-#   Group 2: 1H, 30m, 20m, 15m 10m, 5m
 # TODO: Since the market closes on holidays and 5PM on Friday's should we limit trading on those days?
 # TODO: Need a way to manually trigger bot to open trade when I want
 # TODO: Need to build a UI (web interface using Vue or Vite)
 # TODO: Do we also create a trailing take profit feature?
 # TODO: Do we need the websocket to watch prices?
 # TODO: Should we start storing Aurox signals historically again?
-#   Maybe we could formulate better signals diretion or calculation from this
-# TODO: Should we start tracking the 10D, 5D, 4D, 3D, 2D, 30min?
-# TODO: Look into adding a timestamp calculation to our cacl_all_signals_score_for_direction
-# TODO: Look into adding more weight or adjusting the signal weights for better calc
+#   Maybe we could formulate better signals direction or calculation from this
+# TODO: Look into adding a timestamp calculation to our calc_all_signals_score_for_direction
+#   Could use current and 1 previous Aurox alert to help calculate price difference, plus length of time
+
 
 config = configparser.ConfigParser()
 config.read('bot_config.ini')
@@ -165,13 +162,13 @@ app.config.from_object(Config())
 
 cbapi = CoinbaseAdvAPI(app)
 tm = TradeManager(app)
-loc = LogOrConsole(app)  # Send to Log or Console or both
+log = Log(app)  # Send to Log or Console or both
 
 
 @app.route('/', methods=['GET'])
 def index():
     # print(":index:")
-    loc.log_or_console(True, "I", True, None, ":index:")
+    log.log(True, "I", True, None, ":index:")
 
     if request.method == 'GET':
         return "Its a bit empty here..."
@@ -185,15 +182,15 @@ def index():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     # print(":webhook:")
-    loc.log_or_console(True, "I", None, ":webhook:")
+    log.log(True, "I", None, ":webhook:")
 
     # Parse the incoming JSON data
     data = request.json
 
     # print("\nReceived signal:")
-    loc.log_or_console(True, "I", None, "\nReceived signal:")
+    log.log(True, "I", None, "\nReceived signal:")
     # pp(data)
-    loc.log_or_console(True, "I", None, data)
+    log.log(True, "I", None, data)
 
     if 'signal' not in data:
         data['signal'] = 'test'
@@ -246,7 +243,7 @@ future_orders_time = int(config['scheduler.jobs']['future_orders_time'])
 
 @scheduler.task('interval', id='balance_summary', seconds=balance_summary_time, misfire_grace_time=900)
 def get_balance_summary_job():
-    loc.log_or_console(True, "D", None, ":get_balance_summary_job:")
+    log.log(True, "D", None, ":get_balance_summary_job:")
 
     now = datetime.now(pytz.utc)
     # print("Is trading time?", tm.is_trading_time(now))
@@ -263,7 +260,7 @@ def get_balance_summary_job():
 # Runs every 6 hours
 @scheduler.task('interval', id='products', seconds=coinbase_futures_products_time, misfire_grace_time=900)
 def get_coinbase_futures_products_job():
-    loc.log_or_console(True, "D", None, msg1=":get_coinbase_futures_products_job:")
+    log.log(True, "D", None, msg1=":get_coinbase_futures_products_job:")
 
     now = datetime.now(pytz.utc)
     # print("Is trading time?", tm.is_trading_time(now))
@@ -277,8 +274,8 @@ def get_coinbase_futures_products_job():
 
 @scheduler.task('interval', id='trading', seconds=trading_conditions_time, misfire_grace_time=900)
 def check_trading_conditions_job():
-    loc.log_or_console(True, "I", None, msg1="------------------------------")
-    loc.log_or_console(True, "I", None, msg1=":check_trading_conditions_job:")
+    log.log(True, "I", None, msg1="------------------------------")
+    log.log(True, "I", None, msg1=":check_trading_conditions_job:")
 
     # NOTE: This is the main trading method with additional methods
     #   to check profit and loss, plus DCA and close out trades
@@ -292,8 +289,8 @@ def check_trading_conditions_job():
 
 @scheduler.task('interval', id='orders', seconds=future_orders_time, misfire_grace_time=900)
 def list_and_store_future_orders_job():
-    loc.log_or_console(True, "I", None, msg1="------------------------------")
-    loc.log_or_console(True, "D", None, msg1=":list_and_store_future_orders_job:")
+    log.log(True, "I", None, msg1="------------------------------")
+    log.log(True, "D", None, msg1=":list_and_store_future_orders_job:")
 
     # Check if the market is open or not
     now = datetime.now(pytz.utc)
@@ -305,17 +302,17 @@ def list_and_store_future_orders_job():
     # all_order_status = ["OPEN"]
 
     def run_all_list_orders(statuses, month, product_id):
-        loc.log_or_console(True, "D", None, None)
+        log.log(True, "D", None, None)
         month_msg = f"Month: {month}"
         product_id_msg = f"Product: {product_id}"
-        loc.log_or_console(True, "D", month_msg, product_id_msg)
+        log.log(True, "D", month_msg, product_id_msg)
         for status in statuses:
             orders = cbapi.list_orders(product_id=product_id, order_status=status)
             status_msg = f" {status}"
-            loc.log_or_console(True, "D", status_msg, "Cnt", len(orders['orders']))
+            log.log(True, "D", status_msg, "Cnt", len(orders['orders']))
 
             # if status == "FAILED":
-            #     loc.log_or_console(True, "D", status_msg, "Failed Orders",
+            #     log.log(True, "D", status_msg, "Failed Orders",
             #                        orders['orders'])
 
             if len(orders['orders']) > 0:
@@ -324,7 +321,7 @@ def list_and_store_future_orders_job():
     if tm.is_trading_time(now):
         curr_month = cbapi.get_current_short_month_uppercase()
         next_month = cbapi.get_next_short_month_uppercase()
-        # loc.log_or_console(True, "I","next_month", next_month)
+        # log.log(True, "I","next_month", next_month)
 
         current_future_product = cbapi.get_relevant_future_from_db()
         next_months_future_product = cbapi.get_relevant_future_from_db(month_override=next_month)
@@ -339,7 +336,7 @@ def list_and_store_future_orders_job():
         # [OPEN, FILLED, CANCELLED, EXPIRED, FAILED, UNKNOWN_ORDER_STATUS]
         # all_orders = cbapi.list_orders(product_id=future_product.product_id, order_status=None)
         ## print("all_orders count:", len(all_orders['orders']))
-        # loc.log_or_console(True, msg1="all_orders:", msg2=len(all_orders['orders']))
+        # log.log(True, msg1="all_orders:", msg2=len(all_orders['orders']))
         #
         # if len(all_orders['orders']) > 0:
         #     cbapi.store_or_update_orders_from_api(all_orders)
@@ -386,8 +383,8 @@ def list_and_store_future_orders_job():
 
 # @scheduler.task('interval', id='do_job_6', seconds=10, misfire_grace_time=900)
 # def get_current_position_job():
-#     loc.log_or_console(True, "I", None, msg1="------------------------------")
-#     loc.log_or_console(True, "I", None, msg1=":get_current_position_job:")
+#     log.log(True, "I", None, msg1="------------------------------")
+#     log.log(True, "I", None, msg1=":get_current_position_job:")
 #
 #     future_contract = cbapi.get_relevant_future_from_db()
 #
@@ -397,8 +394,8 @@ def list_and_store_future_orders_job():
 
 # @scheduler.task('interval', id='future_positions', seconds=10, misfire_grace_time=900)
 # def get_current_position_job():
-#     loc.log_or_console(True, "I", None, msg1="------------------------------")
-#     loc.log_or_console(True, "I", None, msg1=":get_current_position_job:")
+#     log.log(True, "I", None, msg1="------------------------------")
+#     log.log(True, "I", None, msg1=":get_current_position_job:")
 #
 #     future_contract = cbapi.get_relevant_future_from_db()
 #
@@ -407,62 +404,65 @@ def list_and_store_future_orders_job():
 #     pp(future_positions)
 
 
-@scheduler.task('interval', id='calc_signals', seconds=10000000, misfire_grace_time=900)
+@scheduler.task('interval', id='calc_signals', seconds=30, misfire_grace_time=900)
 def run_signal_calc():
-    loc.log_or_console(True, "I", None, msg1="------------------------------")
-    loc.log_or_console(True, "I", None, msg1=":run_signal_calc:")
+    log.log(True, "I", None, msg1="------------------------------")
+    log.log(True, "I", None, msg1=":run_signal_calc:")
 
-    weekly_signals = tm.get_latest_weekly_signal()
-    five_day_signals = tm.get_latest_five_day_signal()
-    three_day_signals = tm.get_latest_three_day_signal()
-    two_day_signals = tm.get_latest_two_day_signal()
-    daily_signals = tm.get_latest_daily_signal()
-    twelve_hour_signals = tm.get_latest_12_hour_signal()
-    eight_hour_signals = tm.get_latest_8_hour_signal()
-    six_hour_signals = tm.get_latest_6_hour_signal()
-    four_hour_signals = tm.get_latest_4_hour_signal()
-    three_hour_signals = tm.get_latest_3_hour_signal()
-    two_hour_signals = tm.get_latest_2_hour_signal()
-    one_hour_signals = tm.get_latest_1_hour_signal()
-    thirty_min_signals = tm.get_latest_30_minute_signal()
-    twenty_min_signals = tm.get_latest_20_minute_signal()
-    fifteen_min_signals = tm.get_latest_15_minute_signal()
-    ten_min_signals = tm.get_latest_10_minute_signal()
-    five_min_signals = tm.get_latest_5_minute_signal()
+    # weekly_signals = tm.get_latest_weekly_signal()
+    # five_day_signals = tm.get_latest_five_day_signal()
+    # three_day_signals = tm.get_latest_three_day_signal()
+    # two_day_signals = tm.get_latest_two_day_signal()
+    # daily_signals = tm.get_latest_daily_signal()
+    # twelve_hour_signals = tm.get_latest_12_hour_signal()
+    # eight_hour_signals = tm.get_latest_8_hour_signal()
+    # six_hour_signals = tm.get_latest_6_hour_signal()
+    # four_hour_signals = tm.get_latest_4_hour_signal()
+    # three_hour_signals = tm.get_latest_3_hour_signal()
+    # two_hour_signals = tm.get_latest_2_hour_signal()
+    # one_hour_signals = tm.get_latest_1_hour_signal()
+    # thirty_min_signals = tm.get_latest_30_minute_signal()
+    # twenty_min_signals = tm.get_latest_20_minute_signal()
+    # fifteen_min_signals = tm.get_latest_15_minute_signal()
+    # ten_min_signals = tm.get_latest_10_minute_signal()
+    # five_min_signals = tm.get_latest_5_minute_signal()
 
     # Group 1: 1W, 5D, 3D, 2D, 1D, 12H,
     # Group 2: 8H, 6H, 4H, 3H, 2H, 1H
     # Group 2: 30m, 20m, 15m 10m, 5m
 
-    signal_dict = {
-        "group1": {
-            "weekly": weekly_signals,
-            "five_day": five_day_signals,
-            "three_day": three_day_signals,
-            "two_day": two_day_signals,
-            "daily": daily_signals,
-            "twelve_hr": twelve_hour_signals,
-        },
-        "group2": {
-            "eight_hr": eight_hour_signals,
-            "six_hr": six_hour_signals,
-            "four_hr": four_hour_signals,
-            "three_hr": three_hour_signals,
-            "two_hr": two_hour_signals,
-            "one_hour": one_hour_signals,
-        },
-        "group3": {
-            "thirty_min": thirty_min_signals,
-            "twenty_min": twenty_min_signals,
-            "fifteen_min": fifteen_min_signals,
-            "ten_min": ten_min_signals,
-            "five_min": five_min_signals
-        }
-    }
+    # signal_dict = {
+    #     "group1": {
+    #         "weekly": weekly_signals,
+    #         "five_day": five_day_signals,
+    #         "three_day": three_day_signals,
+    #         "two_day": two_day_signals,
+    #         "daily": daily_signals,
+    #         "twelve_hr": twelve_hour_signals,
+    #     },
+    #     "group2": {
+    #         "eight_hr": eight_hour_signals,
+    #         "six_hr": six_hour_signals,
+    #         "four_hr": four_hour_signals,
+    #         "three_hr": three_hour_signals,
+    #         "two_hr": two_hour_signals,
+    #         "one_hour": one_hour_signals,
+    #     },
+    #     "group3": {
+    #         "thirty_min": thirty_min_signals,
+    #         "twenty_min": twenty_min_signals,
+    #         "fifteen_min": fifteen_min_signals,
+    #         "ten_min": ten_min_signals,
+    #         "five_min": five_min_signals
+    #     }
+    # }
 
-    total_grp_dir_val, total_strength_trade = tm.calc_all_signals_score_for_dir_new(signal_dict)
-    loc.log_or_console(True, "I", "   >>> Total Direction Val & Strength",
-                       total_grp_dir_val, total_strength_trade)
+    # total_grp_dir_val, total_strength_trade = tm.calc_all_signals_score_for_dir_new(signal_dict)
+    # log.log(True, "I", "   >>> Total Direction Val & Strength",
+    #                    total_grp_dir_val, total_strength_trade)
+
+    signal_processor = SignalProcessor(app, tm)
+    signal_processor.run()
 
 
 scheduler.init_app(app)
@@ -470,16 +470,16 @@ scheduler.start()
 
 # Check if we've disabled any of the schedule jobs from the bot_config.ini file
 if disable_balance_summary == 'True':
-    loc.log_or_console(True, "I", " !!! Pausing Schedule Job", msg1="balance_summary")
+    log.log(True, "I", " !!! Pausing Schedule Job", msg1="balance_summary")
     scheduler.pause_job('balance_summary')
 if disable_coinbase_futures_products == 'True':
-    loc.log_or_console(True, "I", " !!! Pausing Schedule Job", msg1="products")
+    log.log(True, "I", " !!! Pausing Schedule Job", msg1="products")
     scheduler.pause_job('products')
 if disable_trading_conditions == 'True':
-    loc.log_or_console(True, "I", " !!! Pausing Schedule Job", msg1="trading")
+    log.log(True, "I", " !!! Pausing Schedule Job", msg1="trading")
     scheduler.pause_job('trading')
 if disable_list_and_store_future_orders == 'True':
-    loc.log_or_console(True, "I", " !!! Pausing Schedule Job", msg1="orders")
+    log.log(True, "I", " !!! Pausing Schedule Job", msg1="orders")
     scheduler.pause_job('orders')
 
 

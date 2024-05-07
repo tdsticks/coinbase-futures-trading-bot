@@ -7,8 +7,9 @@ from db import db
 from pprint import pprint as pp
 
 from signals_processor import SignalProcessor
-from trade_manager import Log
-from trade_manager import CoinbaseAdvAPI
+# from trade_manager import Log
+import logs
+from coinbase_api import CoinbaseAdvAPI
 from trade_manager import TradeManager
 from flask_apscheduler import APScheduler
 from datetime import datetime
@@ -20,6 +21,16 @@ import re
 # TODO: Since the market closes on holidays and 5PM on Friday's should we limit trading on those days?
 # TODO: Need a way to manually trigger bot to open trade when I want
 # TODO: Need to build a UI (web interface using Vue or Vite)
+#   Dashboard
+#       Open Trades / Positions
+#       Funds
+#       Risk / Liquidation %
+#       Signal Status
+#   Trading view
+#       Open Trades / Positions
+#       Manual Trade (add Laddering DCA)
+#       Chart with current orders (Avg Entry, Take Profit, DCA orders)
+#   Bot Settings
 # TODO: Do we also create a trailing take profit feature?
 # TODO: Do we need the websocket to watch prices?
 # TODO: Should we start storing Aurox signals historically again?
@@ -162,7 +173,7 @@ app.config.from_object(Config())
 
 cbapi = CoinbaseAdvAPI(app)
 tm = TradeManager(app)
-log = Log(app)  # Send to Log or Console or both
+log = logs.Log(app)  # Send to Log or Console or both
 
 
 @app.route('/', methods=['GET'])
@@ -212,7 +223,8 @@ def webhook():
 
     # Check if the market is open or not
     if tm.is_trading_time(now):
-        tm.write_db_signal(signal_data)
+        # Get the SignalProcessor through the TradeManager
+        tm.signal_processor.write_db_signal(signal_data, tm)
 
     # Respond back to the webhook sender to acknowledge receipt
     return jsonify({"status": "success", "message": "Signal received"}), 200
@@ -404,65 +416,14 @@ def list_and_store_future_orders_job():
 #     pp(future_positions)
 
 
-@scheduler.task('interval', id='calc_signals', seconds=30, misfire_grace_time=900)
-def run_signal_calc():
-    log.log(True, "I", None, msg1="------------------------------")
-    log.log(True, "I", None, msg1=":run_signal_calc:")
+# @scheduler.task('interval', id='calc_signals', seconds=30, misfire_grace_time=900)
+# def run_signal_calc():
+#     log.log(True, "I", None, msg1="------------------------------")
+#     log.log(True, "I", None, msg1=":run_signal_calc:")
 
-    # weekly_signals = tm.get_latest_weekly_signal()
-    # five_day_signals = tm.get_latest_five_day_signal()
-    # three_day_signals = tm.get_latest_three_day_signal()
-    # two_day_signals = tm.get_latest_two_day_signal()
-    # daily_signals = tm.get_latest_daily_signal()
-    # twelve_hour_signals = tm.get_latest_12_hour_signal()
-    # eight_hour_signals = tm.get_latest_8_hour_signal()
-    # six_hour_signals = tm.get_latest_6_hour_signal()
-    # four_hour_signals = tm.get_latest_4_hour_signal()
-    # three_hour_signals = tm.get_latest_3_hour_signal()
-    # two_hour_signals = tm.get_latest_2_hour_signal()
-    # one_hour_signals = tm.get_latest_1_hour_signal()
-    # thirty_min_signals = tm.get_latest_30_minute_signal()
-    # twenty_min_signals = tm.get_latest_20_minute_signal()
-    # fifteen_min_signals = tm.get_latest_15_minute_signal()
-    # ten_min_signals = tm.get_latest_10_minute_signal()
-    # five_min_signals = tm.get_latest_5_minute_signal()
-
-    # Group 1: 1W, 5D, 3D, 2D, 1D, 12H,
-    # Group 2: 8H, 6H, 4H, 3H, 2H, 1H
-    # Group 2: 30m, 20m, 15m 10m, 5m
-
-    # signal_dict = {
-    #     "group1": {
-    #         "weekly": weekly_signals,
-    #         "five_day": five_day_signals,
-    #         "three_day": three_day_signals,
-    #         "two_day": two_day_signals,
-    #         "daily": daily_signals,
-    #         "twelve_hr": twelve_hour_signals,
-    #     },
-    #     "group2": {
-    #         "eight_hr": eight_hour_signals,
-    #         "six_hr": six_hour_signals,
-    #         "four_hr": four_hour_signals,
-    #         "three_hr": three_hour_signals,
-    #         "two_hr": two_hour_signals,
-    #         "one_hour": one_hour_signals,
-    #     },
-    #     "group3": {
-    #         "thirty_min": thirty_min_signals,
-    #         "twenty_min": twenty_min_signals,
-    #         "fifteen_min": fifteen_min_signals,
-    #         "ten_min": ten_min_signals,
-    #         "five_min": five_min_signals
-    #     }
-    # }
-
-    # total_grp_dir_val, total_strength_trade = tm.calc_all_signals_score_for_dir_new(signal_dict)
-    # log.log(True, "I", "   >>> Total Direction Val & Strength",
-    #                    total_grp_dir_val, total_strength_trade)
-
-    signal_processor = SignalProcessor(app, tm)
-    signal_processor.run()
+    # signal_processor = SignalProcessor(app, tm)
+    # trade_worthy = signal_processor.run()
+    # log.log(True, "I", " >>> Trade Worthy?", trade_worthy)
 
 
 scheduler.init_app(app)

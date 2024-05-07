@@ -4,7 +4,8 @@ from collections import defaultdict
 from datetime import datetime, time
 import pytz
 import configparser
-from trade_manager import TradeManager, CoinbaseAdvAPI
+# from trade_manager import CoinbaseAdvAPI
+import logs
 
 config = configparser.ConfigParser()
 config.read('bot_config.ini')
@@ -12,18 +13,19 @@ config.sections()
 
 
 class SignalProcessor:
-    def __init__(self, flask_app, trade_manager):
+    def __init__(self, flask_app, cbapi):
         self.flask_app = flask_app
-        self.cb_adv_api = CoinbaseAdvAPI(flask_app)
-        self.tm = trade_manager
-        self.log = trade_manager.log
+        # self.cb_adv_api = CoinbaseAdvAPI(flask_app)
+        self.cb_adv_api = cbapi
+        # self.tm = trade_manager
+        self.log = logs.Log(self.flask_app)
         self.config = config
         self.signals = {}
         self.signal_weights = {}
         self.load_signal_weights()
         self.log.log(True, "D", None, ":Initializing SignalProcessor:")
 
-    def write_db_signal(self, data):
+    def write_db_signal(self, data, trade_manager):
         self.log.log(True, "I", None, ":write_db_signal:")
 
         # TODO: May need to convert these timestamps from Aurox as they're in ISO format
@@ -80,16 +82,16 @@ class SignalProcessor:
                     db.session.commit()  # Commit changes at the end of processing
                 except db_errors as e:
                     self.log.log(True, "E",
-                                            "    >>> Error with storing or retrieving AuroxSignal",
-                                            str(e))
+                                 "    >>> Error with storing or retrieving AuroxSignal",
+                                 str(e))
                     db.session.rollback()
 
-                next_months_product_id, next_month = self.tm.check_for_contract_expires()
+                next_months_product_id, next_month = trade_manager.check_for_contract_expires()
 
                 # Now, get the bid and ask prices for the current futures product
                 relevant_future_product = self.cb_adv_api.get_relevant_future_from_db(month_override=next_month)
-                # self.log.log(True, "I", "relevant_future_product product_id",
-                #                         relevant_future_product.product_id)
+                self.log.log(True, "I", "relevant_future_product product_id",
+                                        relevant_future_product.product_id)
 
                 # Get the current bid and ask prices for the futures product related to this signal
                 future_bid_price = 0
@@ -101,18 +103,18 @@ class SignalProcessor:
                     future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
                 except AttributeError as e:
                     self.log.log(True, "E",
-                                            "Unable to get Future Bid and Ask Prices",
-                                            "AttributeError:", e)
+                                 "Unable to get Future Bid and Ask Prices",
+                                 "AttributeError:", e)
                 except ValueError as e:
                     self.log.log(True, "E",
-                                            "Unable to get Future Bid and Ask Prices",
-                                            "ValueError:", e)
+                                 "Unable to get Future Bid and Ask Prices",
+                                 "ValueError:", e)
 
                 if next_months_product_id:
                     self.log.log(True, "I",
-                                            "    > next_months_product_id", next_months_product_id)
+                                 "    > next_months_product_id", next_months_product_id)
                     self.log.log(True, "I",
-                                            "    > next_month", next_month)
+                                 "    > next_month", next_month)
 
                 if new_signal:
                     signal_id = new_signal.id
@@ -145,13 +147,13 @@ class SignalProcessor:
                         db.session.commit()
                 except db_errors as e:
                     self.log.log(True, "E",
-                                            "    >>> Error with storing or retrieving FuturePriceAtSignal",
-                                            str(e))
+                                 "    >>> Error with storing or retrieving FuturePriceAtSignal",
+                                 str(e))
                     db.session.rollback()
             except db_errors as e:
                 self.log.log(True, "E",
-                                        "    >>> Error with storing or retrieving the Aurox signal",
-                                        str(e))
+                             "    >>> Error with storing or retrieving the Aurox signal",
+                             str(e))
 
     def get_latest_weekly_signal(self):
         # self.log.log(True, "D", None,
@@ -545,10 +547,9 @@ class SignalProcessor:
                 group3['strength'] = strength
 
         trade_worthy = self.should_enter_trade(group1, group2, group3)
-        self.log.log(True, "I", " >>> Trade Worthy?", trade_worthy)
+        # self.log.log(True, "I", " >>> Trade Worthy?", trade_worthy)
 
         return trade_worthy
-
 
 # Usage
 # TradeManager class

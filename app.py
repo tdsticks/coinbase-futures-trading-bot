@@ -1,22 +1,25 @@
 from flask import Flask, request, jsonify
 from flask_migrate import Migrate
+from flask_mail import Mail
 import configparser
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from db import db
-from pprint import pprint as pp
-
-from signals_processor import SignalProcessor
-# from trade_manager import Log
-import logs
-from coinbase_api import CoinbaseAdvAPI
-from trade_manager import TradeManager
 from flask_apscheduler import APScheduler
 from datetime import datetime
 import pytz
 import os
 import re
 
+# Custom Libraries
+import logs
+from coinbase_api import CoinbaseAdvAPI
+from trade_manager import TradeManager
+
+# TODO: What happens if the Aurox site goes down or has interruptions and we don't receive signals?
+#   How do we catch up to the latest signals that came in already? Email?
+# TODO: Email Alerts
+# TODO: Notification Alerts
 # TODO: Update profit loss method with updated DCA method
 # TODO: Since the market closes on holidays and 5PM on Friday's should we limit trading on those days?
 # TODO: Need a way to manually trigger bot to open trade when I want
@@ -52,45 +55,13 @@ class Config:
 #  Friday 5 PM ET (excluding observed holidays),
 #  with a 1-hour break each day from 5 PM – 6 PM ET
 
-# NOTE: Need to figure out the trading logic here with orders
-#   Following Aurox guides, we should only be taking signals on the Weekly and maybe daily
-#   We need to factor in the Futures closing after each month (April, May, June, etc.)
-#   We should store each Weekly and Daily signal in the database to help track where we're at
-#   While were in a Weekly Long or Short and the Futures closes for that month, we should
-#   Re-open a Long or Short based on the signal. We only reverse once the opposing Weekly signal
-#   comes into play. This is a long game.
-
-# NOTE:
-#   Perhaps one way we operate is if the Weekly is long, use the Daily Aurox signals for
-#   longs only and close out after expiration or a certain percentage to minimize risk (10%?).
-#   Then keep opening Daily longs per each indicator while under the Weekly long. perhaps we wait
-#   for a duration or percentage from the last signal, or a reverse Daily signal before placing a close order.
-
-# NOTE: Should we do laddering with orders to caught spikes and other liquidations or quick reversals?
-
-# NOTE: Since this whole bot is based on the Aurox Indicator (Ax) signal. We really need to wait
-#   and be patient with it. Again, weekly sigals are far and in few throughout the year.
-#   Scenario One:
-#       The week of Sep 25h, 2023 we see a green long signal. It wasn't until Sep 28th, 2023 using Coinbase
-#       BTC/USD chart in Aurox that we see the first Daily signal. Now, technically we could start opening
-#       a long trade after the Weekly comes in and that might be ok, but we're aiming for safety, especially
-#       dealing with future contracts. BTC had been going sideways even prior to that weekly, so you really
-#       need to watch the charts, turn off the trading (but keep the bot running to track the signals)
-#       if you feel it's too risky or not worth trading.
-#       Around the beginning of Oct (5th, 7th and 9th) we see more Daily signals (Short, Long, Short),
-#       then a dip in the market until another green long on Oct 15th, then a nice surge in the market upwards.
-#       Technically speaking, if we had waited to place the first trade around the first Daily (into Oct),
-#       then we'd be in a new contract month and riding out the dip, it would have been a great place
-#       to be. We could then close out at that Daily short signal right before end the of Oct on the 27th.
-#       That would have been roughly 25% on that trade (or multiple trades if you DCA on the dip).
-#       We need to track and trade within the monthly contracts to avoid forceful closing them on
-#       Coinbase Futures.
-#
-
 
 def create_app():
     flask_app = Flask(__name__)
 
+    """
+    Database Setup and Configure
+    """
     sqlalchemy_database_uri = os.getenv('SQLALCHEMY_DATABASE_URI')
     sqlalchemy_track_modifications = os.getenv('SQLALCHEMY_DATABASE_URI')
     flask_app.config['SQLALCHEMY_DATABASE_URI'] = sqlalchemy_database_uri
@@ -106,6 +77,23 @@ def create_app():
     with flask_app.app_context():
         db.create_all()
 
+    """
+    Email Setup and Configure
+    """
+    use_email = config['email.config']['use_email']
+    mail_class = None
+    if use_email == 'True':
+        flask_app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+        flask_app.config['MAIL_PORT'] = 587
+        flask_app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')  # Use your actual Gmail address
+        flask_app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')  # Use your generated App Password
+        flask_app.config['MAIL_USE_TLS'] = True
+        flask_app.config['MAIL_USE_SSL'] = False
+        mail_class = Mail(flask_app)
+
+    """
+    Logging Setup and Configure
+    """
     # Ensure log directory exists
     log_directory = 'logs'
     if not os.path.exists(log_directory):
@@ -163,17 +151,31 @@ def create_app():
     if flask_app.config['DEBUG']:
         flask_app.logger.info("Debugging is ON")
 
-    return flask_app
+    return flask_app, mail_class
 
 
-app = create_app()
+app, mail_cls = create_app()
 
 # Add the ApScheduler Config
 app.config.from_object(Config())
 
-cbapi = CoinbaseAdvAPI(app)
-tm = TradeManager(app)
-log = logs.Log(app)  # Send to Log or Console or both
+cbapi = CoinbaseAdvAPI(app, mail_cls)
+tm = TradeManager(app, mail_cls)
+log = logs.Log(app)  # Send to Log
+
+enable_live_trading = config['trade.conditions']['enable_live_trading']
+if enable_live_trading == 'True':
+    log.log(True, "W", None, "\n")
+    log.log(True, "W", None, "---------------------")
+    log.log(True, "W", None, "Live Trading ENABLED!")
+    log.log(True, "W", None, "---------------------")
+    log.log(True, "W", None, "\n")
+else:
+    log.log(True, "W", None, "\n")
+    log.log(True, "W", None, "---------------------")
+    log.log(True, "W", None, "Live Trading DISABLED!")
+    log.log(True, "W", None, "---------------------")
+    log.log(True, "W", None, "\n")
 
 
 @app.route('/', methods=['GET'])
@@ -192,42 +194,53 @@ def index():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    # print(":webhook:")
     log.log(True, "I", None, ":webhook:")
 
     # Parse the incoming JSON data
     data = request.json
 
-    # print("\nReceived signal:")
-    log.log(True, "I", None, "\nReceived signal:")
-    # pp(data)
-    log.log(True, "I", None, data)
+    # If we get data
+    if data:
+        log.log(True, "I", None, "\nReceived signal:")
+        # pp(data)
+        log.log(True, "I", None, data)
 
-    if 'signal' not in data:
-        data['signal'] = 'test'
+        if 'signal' not in data:
+            data['signal'] = 'test'
 
-    # NOTE: Not using this currently
-    # tm.handle_aurox_signal(data['signal'], data['symbol'])
+        signal_data = {
+            'timestamp': data['timestamp'],
+            'price': data['price'].replace(',', ''),  # Remove commas for numeric processing if necessary
+            'signal': data['signal'],
+            'trading_pair': data['symbol'],
+            'timeUnit': data['timeUnit'],
+            # 'message': data.get('message')  # Use .get for optional fields
+        }
 
-    signal_data = {
-        'timestamp': data['timestamp'],
-        'price': data['price'].replace(',', ''),  # Remove commas for numeric processing if necessary
-        'signal': data['signal'],
-        'trading_pair': data['symbol'],
-        'timeUnit': data['timeUnit'],
-        # 'message': data.get('message')  # Use .get for optional fields
-    }
+        now = datetime.now(pytz.utc)
+        # print("Is trading time?", tm.is_trading_time(now))
 
-    now = datetime.now(pytz.utc)
-    # print("Is trading time?", tm.is_trading_time(now))
+        # Check if the market is open or not
+        if tm.is_trading_time(now):
+            try:
+                # Get the SignalProcessor through the TradeManager
+                signal_stored = tm.signal_processor.write_db_signal(signal_data, tm)
+                log.log(True, "I", None, "  >>> Signal Stored", signal_stored)
 
-    # Check if the market is open or not
-    if tm.is_trading_time(now):
-        # Get the SignalProcessor through the TradeManager
-        tm.signal_processor.write_db_signal(signal_data, tm)
+                # Respond back to the webhook sender to acknowledge receipt
+                return jsonify({"Status": "Success", "Message": "Signal received and stored"}), 201
 
-    # Respond back to the webhook sender to acknowledge receipt
-    return jsonify({"status": "success", "message": "Signal received"}), 200
+            except Exception as e:
+                log.log(True, "E", "Unexpected write_db_signal Error:", msg1=e)
+                return jsonify({"Status": "Unsuccessful",
+                                "Message": "Signal received, but NOT stored",
+                                "Data": data,
+                                "Error": e}), 405
+    else:
+        # Respond back to the webhook sender to acknowledge receipt
+        return jsonify({"Status": "Unsuccessful",
+                        "Message": "Signal not received",
+                        "Sata": data}), 204
 
 
 #######################
@@ -392,18 +405,6 @@ def list_and_store_future_orders_job():
 #                      ask_price=cur_future_ask_price,
 #                      manual_price=manual_price)
 
-
-# @scheduler.task('interval', id='do_job_6', seconds=10, misfire_grace_time=900)
-# def get_current_position_job():
-#     log.log(True, "I", None, msg1="------------------------------")
-#     log.log(True, "I", None, msg1=":get_current_position_job:")
-#
-#     future_contract = cbapi.get_relevant_future_from_db()
-#
-#     # Get Current Positions
-#     future_positions = cbapi.get_future_position(future_contract.product_id)
-#     pp(future_positions)
-
 # @scheduler.task('interval', id='future_positions', seconds=10, misfire_grace_time=900)
 # def get_current_position_job():
 #     log.log(True, "I", None, msg1="------------------------------")
@@ -432,7 +433,6 @@ if disable_trading_conditions == 'True':
 if disable_list_and_store_future_orders == 'True':
     log.log(True, "I", " !!! Pausing Schedule Job", msg1="orders")
     scheduler.pause_job('orders')
-
 
 if __name__ == '__main__':
     # Note: On PythonAnywhere or other production environments, you might not need to run the app like this.

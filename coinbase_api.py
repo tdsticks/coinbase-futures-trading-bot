@@ -23,9 +23,10 @@ config.sections()
 
 class CoinbaseAdvAPI:
 
-    def __init__(self, flask_app):
+    def __init__(self, flask_app, mail_cls):
         # print(":Initializing CoinbaseAdvAPI:")
         self.flask_app = flask_app
+        self.mail_cls = mail_cls
         self.log = logs.Log(flask_app)  # Send to Log or Console or both
         self.client = RESTClient(api_key=API_KEY, api_secret=API_SECRET)
         self.log.log(True, "D", None, ":Initializing CoinbaseAdvAPI:")
@@ -432,10 +433,10 @@ class CoinbaseAdvAPI:
 
         order_created = {}
         enable_live_trading = config['trade.conditions']['enable_live_trading']
-        self.log.log(True, "D", "enable_live_trading", enable_live_trading)
 
         # Live trading enabled
-        if enable_live_trading:
+        if enable_live_trading == 'True':
+            self.log.log(True, "W", "Live Trading Enabled", enable_live_trading)
 
             # NOTE: A unique UUID that we make (should store and not repeat, must be in UUID format
             # Generate and print a UUID4
@@ -575,7 +576,7 @@ class CoinbaseAdvAPI:
             self.store_order(post_order_for_storing)
             # print("Order Created and Store in the DB")
         else:
-            self.log.log(True, "D", "Live Trading Disabled")
+            self.log.log(True, "W", "Live Trading Disabled")
 
         return order_created
 

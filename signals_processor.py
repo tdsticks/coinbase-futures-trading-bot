@@ -1,11 +1,12 @@
-from models.signals import AuroxSignal, FuturePriceAtSignal
-from db import db, db_errors, joinedload, and_, session
+from db import db, db_errors, joinedload
 from collections import defaultdict
-from datetime import datetime, time
+from datetime import datetime
 import pytz
 import configparser
-# from trade_manager import CoinbaseAdvAPI
 import logs
+
+# Models
+from models.signals import AuroxSignal, FuturePriceAtSignal
 
 config = configparser.ConfigParser()
 config.read('bot_config.ini')
@@ -30,13 +31,13 @@ class SignalProcessor:
 
         # TODO: May need to convert these timestamps from Aurox as they're in ISO format
 
+        signal_stored = False
+
         # Create a new AuroxSignal object from received data
         # Also write a record using the signal spot price, futures bid and ask
         #   and store the relationship ids to both
         with self.flask_app.app_context():  # Push an application context
             try:
-                # BUG: Still having issues with not storing duplicates from Aurox webhook
-
                 # Convert timestamp to datetime object if necessary
                 # timestamp = data['timestamp']
                 timestamp = datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -80,6 +81,8 @@ class SignalProcessor:
                         self.log.log(True, "I", "    > Stored new signal", new_signal)
 
                     db.session.commit()  # Commit changes at the end of processing
+                    signal_stored = True
+
                 except db_errors as e:
                     self.log.log(True, "E",
                                  "    >>> Error with storing or retrieving AuroxSignal",
@@ -154,6 +157,8 @@ class SignalProcessor:
                 self.log.log(True, "E",
                              "    >>> Error with storing or retrieving the Aurox signal",
                              str(e))
+
+        return signal_stored
 
     def get_latest_weekly_signal(self):
         # self.log.log(True, "D", None,
@@ -574,9 +579,9 @@ class SignalProcessor:
 
 # Usage
 # TradeManager class
-# app = flask_app
-# tm = TradeManager(app)
-# cb_adv_api = CoinbaseAdvAPI(app)
+# app, mail_cls = flask_app
+# tm = TradeManager(app, mail_cls)
+# cb_adv_api = CoinbaseAdvAPI(app, mail_cls)
 
 # Signal Process runs within the Trade Manager Class above
 # self.signal_processor = SignalProcessor(app, cb_adv_api)

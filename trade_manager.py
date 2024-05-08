@@ -1,17 +1,17 @@
 import configparser
-import configparser
 import os
 from datetime import datetime, time
-
 import logs
 import pytz
 from dotenv import load_dotenv
 
+# Custom Libraries
 from coinbase_api import CoinbaseAdvAPI
-from db import db, db_errors, joinedload
-from models.futures import (FuturePosition)
-from models.signals import AuroxSignal, FuturePriceAtSignal
 from signals_processor import SignalProcessor
+from email_manager import EmailManager
+
+# Models
+from models.futures import (FuturePosition)
 
 load_dotenv()
 
@@ -26,45 +26,14 @@ config.sections()
 
 class TradeManager:
 
-    def __init__(self, flask_app):
+    def __init__(self, flask_app, mail_cls):
         # print(":Initializing TradeManager:")
         self.flask_app = flask_app
         self.log = logs.Log(flask_app)  # Send to Log or Console or both
-        self.cb_adv_api = CoinbaseAdvAPI(flask_app)
-
+        self.email_mgr = EmailManager(flask_app, mail_cls)
+        self.cb_adv_api = CoinbaseAdvAPI(flask_app, mail_cls)
         self.signal_processor = SignalProcessor(flask_app, self.cb_adv_api)
-
         self.log.log(True, "D", None, ":Initializing TradeManager:")
-
-    def compare_last_daily_to_todays_date(self):
-        self.log.log(True, "I", None, ":compare_last_daily_to_todays_date:")
-
-        latest_signal = self.get_latest_daily_signal()
-        if latest_signal:
-            # Strip the 'Z' and parse the datetime
-            signal_time = datetime.fromisoformat(latest_signal.timestamp.rstrip('Z'))
-
-            # Ensuring it's UTC
-            signal_time = signal_time.replace(tzinfo=pytz.utc)
-
-            now = datetime.now(pytz.utc)  # Current time in UTC
-
-            # Calculate time difference
-            time_diff = now - signal_time
-
-            # Check if the difference is less than or equal to 24 hours
-            if time_diff <= datetime.timedelta(days=1):
-                # print("Within 24 hours, proceed to place trade.")
-                self.log.log(True, "I", None, "Within 24 hours, proceed to place trade.")
-                return True
-            else:
-                # print("More than 24 hours since the last signal, wait for the next one.")
-                self.log.log(True, "W", None,
-                             "More than 24 hours since the last signal, wait for the next one.")
-        else:
-            # print("No daily signal found.")
-            self.log.log(True, "W", None,
-                         "No daily signal found.")
 
     def check_for_contract_expires(self):
         self.log.log(True, "D", None,
@@ -429,8 +398,8 @@ class TradeManager:
                 #  Is 15 Minute signal side the same as the signal_calc_trade_direction side?
 
                 fifteen_min_trade_signal = fifteen_min_signals.signal
-                self.log.log(True, "I", None," >>> 15 Min Signal Direction", fifteen_min_trade_signal)
-                self.log.log(True, "I", None," >>> Trade Signal Direction", trade_direction)
+                self.log.log(True, "I", None, " >>> 15 Min Signal Direction", fifteen_min_trade_signal)
+                self.log.log(True, "I", None, " >>> Trade Signal Direction", trade_direction)
 
                 # NOTE: Does the 15 Min match the overall signal trade direction of the Aurox signals?
 
@@ -520,6 +489,15 @@ class TradeManager:
                                                                      bot_note="MAIN")
                         print("MAIN order_created:", order_created)
 
+                        email_body = (f"New Order Placed!"
+                                      f"\nTrade side:{trade_side}"
+                                      f"\nOrder type:{order_type} "
+                                      f"\nLimit Price:{limit_price}"
+                                      f"\nSize:{size}"
+                                      f"\nLeverage:{leverage}")
+                        self.email_mgr.send_email(subject="New Order Placed!",
+                                                  body=email_body)
+
                         # TODO: Need to see if the MAIN order is filled first before placing ladder orders
 
                         # How many ladder orders? (10 max)
@@ -546,7 +524,7 @@ class TradeManager:
                                  fifteen_min_pos_trade_dir_msg)
             else:
                 self.log.log(True, "W", None,
-                             "\nSignal score is neutral, let's wait...",)
+                             "\nSignal score is neutral, let's wait...", )
                 for group in groups:
                     self.log.log(True, "I", "   >>> ", group, "\n")
                     self.log.log(True, "I", "       > Direction", groups[group]['direction'], "\n")
@@ -556,6 +534,9 @@ class TradeManager:
                                  groups[group]['normalized_score'], "\n")
                     self.log.log(True, "I", "\n")
 
+    def place_trade_and_ladder(self):
+        self.log.log(True, "D", None, "--------------------------")
+        self.log.log(True, "D", None, ":place_trade_and_ladder:")
 
     def tracking_current_position_profit_loss(self, position, order, next_month):
         self.log.log(True, "D", None, "---------------------------------------")

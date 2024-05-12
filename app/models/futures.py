@@ -1,5 +1,4 @@
-from db import db
-from datetime import datetime
+from app import db
 
 
 class CoinbaseFuture(db.Model):

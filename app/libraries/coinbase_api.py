@@ -1,14 +1,13 @@
 from coinbase.rest import RESTClient
 import configparser
-from db import db, db_errors, and_
-from models.futures import (CoinbaseFuture, AccountBalanceSummary,
-                            FuturePosition, FuturesOrder)
+from app.models import set_db_errors, set_session
+from app.models.futures import (CoinbaseFuture, AccountBalanceSummary,
+                                FuturePosition, FuturesOrder)
 from dotenv import load_dotenv
 import os
 import calendar
 from datetime import datetime
 import uuid
-import logs
 
 load_dotenv()
 
@@ -23,13 +22,15 @@ config.sections()
 
 class CoinbaseAdvAPI:
 
-    def __init__(self, flask_app, mail_cls):
-        # print(":Initializing CoinbaseAdvAPI:")
-        self.flask_app = flask_app
-        self.mail_cls = mail_cls
-        self.log = logs.Log(flask_app)  # Send to Log or Console or both
+    def __init__(self, app):
+        print(":Initializing CoinbaseAdvAPI:")
+        self.log = app.custom_log.log
+        self.app = app
+        self.db_session = set_session
+        self.db_errors = set_db_errors
+
         self.client = RESTClient(api_key=API_KEY, api_secret=API_SECRET)
-        self.log.log(True, "D", None, ":Initializing CoinbaseAdvAPI:")
+        self.log(True, "D", None, ":Initializing CoinbaseAdvAPI:")
 
     @staticmethod
     def parse_datetime(date_str):
@@ -40,7 +41,7 @@ class CoinbaseAdvAPI:
 
     def get_portfolios(self):
         # print(":get_portfolio_breakdown:")
-        self.log.log(True, "I", None, ":get_portfolio_breakdown:")
+        self.log(True, "I", None, ":get_portfolio_breakdown:")
 
         get_portfolios = self.client.get_portfolios()
         # print("get_portfolios", get_portfolios)
@@ -52,11 +53,11 @@ class CoinbaseAdvAPI:
 
     def get_portfolio_breakdown(self, portfolio_uuid):
         # print(":get_portfolio_breakdown:")
-        self.log.log(True, "I", None, ":get_portfolio_breakdown:")
+        self.log(True, "I", None, ":get_portfolio_breakdown:")
 
         get_portfolio_breakdown = self.client.get_portfolio_breakdown(portfolio_uuid=portfolio_uuid)
         # print("get_portfolio_breakdown", get_portfolio_breakdown)
-        self.log.log(True, "I", "get_portfolio_breakdown", get_portfolio_breakdown)
+        self.log(True, "I", "get_portfolio_breakdown", get_portfolio_breakdown)
 
         return
 
@@ -90,13 +91,13 @@ class CoinbaseAdvAPI:
 
     def store_futures_balance_summary(self, data):
         # print(':store_futures_balance_summary:')
-        self.log.log(True, "D", None,
+        self.log(True, "D", None,
                      ":store_futures_balance_summary:")
 
         balance_summary_data = data['balance_summary']
         # pp(balance_summary_data)
 
-        with self.flask_app.app_context():  # Push an application context
+        with self.app.app_context():  # Push an application context
             try:
                 # Try to find the existing balance summary, assuming only one record exists
                 existing_balance_summary = AccountBalanceSummary.query.limit(1).all()
@@ -144,14 +145,15 @@ class CoinbaseAdvAPI:
                         total_usd_balance=float(balance_summary_data['total_usd_balance']['value']),
                         unrealized_pnl=float(balance_summary_data['unrealized_pnl']['value']),
                     )
-                    db.session.add(new_balance_summary)
+                    # db.session.add(new_balance_summary)
+                    self.db_session.add(new_balance_summary)
                     # print("Stored new balance summary")
 
                 # Commit the changes to the database
                 db.session.commit()
                 # print("Balance summary updated or created successfully.")
             except Exception as e:
-                self.log.log(True, "E",
+                self.log(True, "E",
                              "Failed to add/update balance summary",
                              balance_summary_data, e)
                 db.session.rollback()
@@ -159,27 +161,27 @@ class CoinbaseAdvAPI:
 
     def get_product(self, product_id="BTC-USDT"):
         # print(":get_product:")
-        # self.log.log(True, "D", None, ":get_product:")
+        # self.log(True, "D", None, ":get_product:")
 
         get_product = self.client.get_product(product_id=product_id)
         # print("get_product:", get_product)
-        # self.log.log(True, "I", "get_product", get_product)
+        # self.log(True, "I", "get_product", get_product)
 
         return get_product
 
     def list_products(self, product_type="FUTURE"):
         # print(":list_products:")
-        # self.log.log(True, "D", None, ":list_products:")
+        # self.log(True, "D", None, ":list_products:")
 
         get_products = self.client.get_products(product_type=product_type)
         # print("get_products:", get_products)
-        # self.log.log(True, "I", "get_products", get_products)
+        # self.log(True, "I", "get_products", get_products)
 
         return get_products
 
     def store_btc_futures_products(self, future_products):
         # print(":store_btc_futures_products:")
-        # self.log.log(True, "D", None, ":store_btc_futures_products:")
+        # self.log(True, "D", None, ":store_btc_futures_products:")
         # print("future_products:", future_products, type(future_products))
 
         for future in future_products['products']:
@@ -187,7 +189,7 @@ class CoinbaseAdvAPI:
             if 'BTC' in future['future_product_details']['contract_root_unit']:
                 # print("future product:", future)
 
-                with self.flask_app.app_context():  # Push an application context
+                with self.app.app_context():  # Push an application context
                     try:
                         # Convert necessary fields
                         product_id = future['product_id']
@@ -228,7 +230,7 @@ class CoinbaseAdvAPI:
                         db.session.commit()
                     except Exception as e:
                         # print(f"Failed to add future product {future['product_id']}: {e}")
-                        self.log.log(True, "E",
+                        self.log(True, "E",
                                      "Failed to add future product",
                                      future['product_id'],
                                      e)
@@ -255,11 +257,11 @@ class CoinbaseAdvAPI:
         return next_short_month
 
     def get_relevant_future_from_db(self, month_override=None):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_relevant_future_from_db:")
 
         # Find this months future product
-        with self.flask_app.app_context():
+        with self.app.app_context():
 
             # Get the current month's short name in uppercase
             short_month = self.get_current_short_month_uppercase()
@@ -268,8 +270,8 @@ class CoinbaseAdvAPI:
                 short_month = month_override
 
             # print(f"Searching for futures contracts for the month: {short_month}")
-            self.log.log(True, "I",
-                         "   Searching for futures contracts for the month", short_month)
+            # self.log(True, "I",
+            #              "   Searching for futures contracts for the month", short_month)
 
             # Search the database for a matching futures contract
             future_contract = CoinbaseFuture.query.filter(
@@ -278,17 +280,17 @@ class CoinbaseAdvAPI:
 
             if future_contract:
                 # print("\nFound future entry:", future_entry)
-                self.log.log(True, "I",
+                self.log(True, "I",
                              "       Found future contract", future_contract.product_id)
                 return future_contract
             else:
                 # print("\n   No future entry found for this month.")
-                self.log.log(True, "W",
+                self.log(True, "W",
                              None, " >>> No future contract found for this month.")
                 return None
 
     def list_future_positions(self):
-        self.log.log(True, "D", None,
+        self.log(True, "D", None,
                      ":list_future_positions:")
 
         list_futures_positions = self.client.list_futures_positions()
@@ -297,7 +299,7 @@ class CoinbaseAdvAPI:
         return list_futures_positions
 
     def get_future_position(self, product_id: str):
-        self.log.log(True, "D", None,
+        self.log(True, "D", None,
                      ":get_future_position:")
 
         get_futures_positions = self.client.get_futures_position(product_id=product_id)
@@ -306,12 +308,12 @@ class CoinbaseAdvAPI:
         return get_futures_positions
 
     def store_future_positions(self, p_list_futures_positions):
-        self.log.log(True, "D", None,
-                     ":store_future_positions:")
+        # self.log(True, "D", None,
+        #              ":store_future_positions:")
         # pp(p_list_futures_positions)
 
         # Clear existing positions
-        with (self.flask_app.app_context()):  # Push an application context
+        with (self.app.app_context()):  # Push an application context
             try:
                 if p_list_futures_positions and 'positions' in p_list_futures_positions:
                     # Clear existing positions
@@ -331,20 +333,20 @@ class CoinbaseAdvAPI:
                         )
                         db.session.add(new_position)
                     db.session.commit()
-                    self.log.log(True, "I", None,
-                                 "   Future position updated")
+                    self.log(True, "I", None,
+                                 "  > Open Future position updated")
             except db_errors as e:
                 db.session.rollback()
-                self.log.log(True, "E", "Error storing future position", e)
+                self.log(True, "E", "Error storing future position", e)
             except ValueError as e:
                 db.session.rollback()
-                self.log.log(True, "E", "Data conversion error", e)
+                self.log(True, "E", "Data conversion error", e)
             except Exception as e:
                 db.session.rollback()
-                self.log.log(True, "E", "Unexpected error", e)
+                self.log(True, "E", "Unexpected error", e)
 
     def get_current_bid_ask_prices(self, product_id):
-        # self.log.log(True, "D", None, ":get_current_bid_ask_prices:")
+        # self.log(True, "D", None, ":get_current_bid_ask_prices:")
 
         get_bid_ask = self.client.get_best_bid_ask(product_ids=product_id)
         # print("get_bid_ask", get_bid_ask)
@@ -352,7 +354,7 @@ class CoinbaseAdvAPI:
         return get_bid_ask
 
     def get_current_average_price(self, product_id):
-        # self.log.log(True, "D", None, ":get_current_future_price:")
+        # self.log(True, "D", None, ":get_current_future_price:")
 
         # Get Current Bid Ask Prices
         cur_future_bid_ask_price = self.get_current_bid_ask_prices(product_id)
@@ -361,10 +363,10 @@ class CoinbaseAdvAPI:
         cur_prices_msg = (f"    Prd: {product_id} - "
                           f"Current Futures: Bid: ${cur_future_bid_price} "
                           f"Ask: ${cur_future_ask_price}")
-        self.log.log(True, "I", None, cur_prices_msg)
+        self.log(True, "I", None, cur_prices_msg)
 
         cur_future_avg_price = (int(cur_future_bid_price) + int(cur_future_ask_price)) / 2
-        # self.log.log(True, "I",
+        # self.log(True, "I",
         #                         "   Current Future Avg Price", cur_future_avg_price)
 
         return cur_future_bid_price, cur_future_ask_price, cur_future_avg_price
@@ -381,7 +383,7 @@ class CoinbaseAdvAPI:
     def create_order(self, side: str, product_id: str, size: str, bot_note: str,
                      limit_price: str = None, leverage: str = "3",
                      order_type: str = 'limit_limit_gtc'):
-        self.log.log(True, "D", "create_order")
+        self.log(True, "D", "create_order")
         # print(f"    order_type: {order_type} "
         #       f"side: {side}, "
         #       f"product_id: {product_id}, "
@@ -436,7 +438,7 @@ class CoinbaseAdvAPI:
 
         # Live trading enabled
         if enable_live_trading == 'True':
-            self.log.log(True, "W", "Live Trading Enabled", enable_live_trading)
+            self.log(True, "W", "Live Trading Enabled", enable_live_trading)
 
             # NOTE: A unique UUID that we make (should store and not repeat, must be in UUID format
             # Generate and print a UUID4
@@ -519,20 +521,20 @@ class CoinbaseAdvAPI:
             # pp(order_created)
 
             if order_created.get('success'):
-                self.log.log(True, "I", "Order successfully created")
-                self.log.log(True, "D", None, order_created.get('success_response'))
+                self.log(True, "I", "Order successfully created")
+                self.log(True, "D", None, order_created.get('success_response'))
 
             if order_created.get('failure_reason'):
-                self.log.log(True, "I", "Order creation failed")
-                self.log.log(True, "D", None, order_created.get('failure_reason'))
+                self.log(True, "I", "Order creation failed")
+                self.log(True, "D", None, order_created.get('failure_reason'))
 
                 if order_created.get('error_response'):
-                    self.log.log(True, "E", "Error Message",
+                    self.log(True, "E", "Error Message",
                                  order_created.get('error_response').get('message'))
-                    self.log.log(True, "E", "Error Details",
+                    self.log(True, "E", "Error Details",
                                  order_created.get('error_response').get('error_details'))
                 else:
-                    self.log.log(True, "D", "No detailed error message provided.")
+                    self.log(True, "D", "No detailed error message provided.")
 
             post_order_for_storing = {
                 "order_id": order_created['order_id'],
@@ -576,7 +578,7 @@ class CoinbaseAdvAPI:
             self.store_order(post_order_for_storing)
             # print("Order Created and Store in the DB")
         else:
-            self.log.log(True, "W", "Live Trading Disabled")
+            self.log(True, "W", "Live Trading Disabled")
 
         return order_created
 
@@ -603,13 +605,13 @@ class CoinbaseAdvAPI:
 
     def get_current_take_profit_order_from_db(self, order_status: str, side: str,
                                               bot_note: str, get_all_orders=False):
-        # self.log.log(True, "I", None, "get_current_take_profit_order_from_db")
+        # self.log(True, "I", None, "get_current_take_profit_order_from_db")
 
         open_futures = None
 
         # NOTE: We should only get one if we're only trading one future (BTC)
 
-        with self.flask_app.app_context():  # Push an application context
+        with self.app.app_context():  # Push an application context
             try:
 
                 if get_all_orders:
@@ -623,7 +625,7 @@ class CoinbaseAdvAPI:
                             FuturesOrder.side == side
                         )
                     ).all()
-                    # self.log.log(True, "I",
+                    # self.log(True, "I",
                     #                         "open_futures", open_futures)
                 else:
                     # Search the database for a matching futures contract
@@ -636,37 +638,37 @@ class CoinbaseAdvAPI:
                             FuturesOrder.side == side
                         )
                     ).first()
-                    # self.log.log(True, "I", "open_futures", open_futures)
+                    # self.log(True, "I", "open_futures", open_futures)
 
                 return open_futures
             except Exception as e:
-                self.log.log(True, "E",
+                self.log(True, "E",
                              "Database error getting", msg1=e)
         # print("open_futures:", open_futures)
         return open_futures
 
     def get_dca_filled_orders_from_db(self, dca_side: str):
-        # self.log.log(True, "I", None,
+        # self.log(True, "I", None,
         #                         "get_dca_filled_orders_from_db")
         dca_avg_filled_price = 0
         dca_avg_filled_price_2 = 0
         dca_count = 1  # This includes the MAIN initial order
 
         quantity = int(config['dca.ladder.trade_percentages']['ladder_quantity'])
-        # self.log.log(True, "I", "    quantity", quantity)
+        # self.log(True, "I", "    quantity", quantity)
 
         # dca_note_list = ['DCA1', 'DCA2', 'DCA3', 'DCA4', 'DCA5']
         dca_note_list = ["DCA" + str(x) for x in range(1, quantity + 1)]
-        # self.log.log(True, "I", "    dca_note_list", dca_note_list)
+        # self.log(True, "I", "    dca_note_list", dca_note_list)
 
         for i, dca in enumerate(dca_note_list):
             # print("dca_note_list - i:", i)
             dca_order = self.get_current_take_profit_order_from_db(order_status="FILLED",
                                                                    side=dca_side, bot_note=dca)
             if dca_order:
-                # self.log.log(True, "I", "dca_order", dca_order)
-                # self.log.log(True, "I", "    dca_order.limit_price", dca_order.limit_price)
-                # self.log.log(True, "I", "    dca_order.average_filled_price", dca_order.average_filled_price)
+                # self.log(True, "I", "dca_order", dca_order)
+                # self.log(True, "I", "    dca_order.limit_price", dca_order.limit_price)
+                # self.log(True, "I", "    dca_order.average_filled_price", dca_order.average_filled_price)
 
                 dca_contract_num_str = f"dca_trade_{str(i + 1)}_contracts"
                 # print("dca_contract_num_str:", dca_contract_num_str)
@@ -683,23 +685,23 @@ class CoinbaseAdvAPI:
         return dca_avg_filled_price, dca_avg_filled_price_2, dca_count
 
     def cancel_order(self, order_ids: list):
-        self.log.log(True, "D", "cancel_order")
-        # self.log.log(True, "I", "    order_ids", order_ids)
+        self.log(True, "D", "cancel_order")
+        # self.log(True, "I", "    order_ids", order_ids)
 
         cancelled_order = None
         if len(order_ids) > 0:
             cancelled_order = self.client.cancel_orders(order_ids=order_ids)
-            # self.log.log(True, "I", "cancelled_order", cancelled_order)
+            # self.log(True, "I", "cancelled_order", cancelled_order)
         else:
             pass
-            # self.log.log(True, "W", " !!! No order ids to cancel")
+            # self.log(True, "W", " !!! No order ids to cancel")
         return cancelled_order
 
     def update_cancelled_orders(self):
-        self.log.log(True, "I",
-                     None, "update_cancelled_orders")
+        self.log(True, "I",
+                     None, ":update_cancelled_orders:")
 
-        with self.flask_app.app_context():  # Push an application context
+        with self.app.app_context():  # Push an application context
             try:
                 # Search the database for a matching futures contract
                 cancelled_futures = FuturesOrder.query.filter(
@@ -709,7 +711,7 @@ class CoinbaseAdvAPI:
                         FuturesOrder.bot_active == 1,
                         )
                 ).all()
-                # self.log.log(True, "I",
+                # self.log(True, "I",
                 #                         "cancelled_futures", cancelled_futures)
 
                 # If we have cancelled futures, update the bot_active
@@ -723,18 +725,18 @@ class CoinbaseAdvAPI:
                         updated_cancelled_order = self.update_order_fields(
                             client_order_id=cancelled_future.client_order_id,
                             field_values=field_values)
-                        self.log.log(True, "I",
-                                     "updated_cancelled_order",
-                                     updated_cancelled_order)
+                        # self.log(True, "I",
+                        #              "updated_cancelled_order",
+                        #              updated_cancelled_order)
             except Exception as e:
-                self.log.log(True, "E",
+                self.log(True, "E",
                              "Database error getting", msg1=e)
 
     def update_bot_active_orders(self):
-        self.log.log(True, "I",
-                     None, "update_bot_active_orders")
+        # self.log(True, "I",
+        #              None, "update_bot_active_orders")
 
-        with self.flask_app.app_context():  # Push an application context
+        with self.app.app_context():  # Push an application context
             try:
                 # Search the database for a matching futures contract
                 bot_active_orders = FuturesOrder.query.filter(
@@ -743,7 +745,7 @@ class CoinbaseAdvAPI:
                         FuturesOrder.bot_active == 1,
                         )
                 ).all()
-                self.log.log(True, "I",
+                self.log(True, "I",
                              "bot_active_orders", bot_active_orders)
 
                 # If we have cancelled futures, update the bot_active
@@ -757,11 +759,11 @@ class CoinbaseAdvAPI:
                         updated_bot_active_order = self.update_order_fields(
                             client_order_id=bot_active_order.client_order_id,
                             field_values=field_values)
-                        self.log.log(True, "I",
+                        self.log(True, "I",
                                      "updated_bot_active_order",
                                      updated_bot_active_order)
             except Exception as e:
-                self.log.log(True, "E",
+                self.log(True, "E",
                              "Database error getting", msg1=e)
 
     def edit_order(self, order_id, size=None, price=None):
@@ -821,10 +823,10 @@ class CoinbaseAdvAPI:
         # self.store_order(post_order_edit_for_storing)
 
     def store_order(self, order_data):
-        self.log.log(True, "D", None, ":store_order:")
-        # self.log.log(True, "I", "order_data", order_data)
+        self.log(True, "D", None, ":store_order:")
+        # self.log(True, "I", "order_data", order_data)
 
-        with self.flask_app.app_context():  # Push an application context
+        with self.app.app_context():  # Push an application context
             try:
                 client_order_id = order_data['client_order_id']
                 # print(" client_order_id:", client_order_id)
@@ -880,27 +882,27 @@ class CoinbaseAdvAPI:
                     db.session.commit()
 
                     order_stored = f"    Order Client ID:{client_order_id} processed: {'updated' if order.id else 'created'}"
-                    self.log.log(True, "I", None, order_stored)
+                    self.log(True, "I", None, order_stored)
                 else:
-                    self.log.log(True, "I", None,
+                    self.log(True, "I", None,
                                  " No order ID provided or order creation failed. Check input data.")
             except db_errors as e:
-                self.log.log(True, "I",
+                self.log(True, "I",
                              "    Error either getting or storing the Order record",
                              str(e))
                 db.session.rollback()
                 return None
 
     def store_or_update_orders_from_api(self, orders_data):
-        # self.log.log(True, "D", None, ":store_or_update_orders_from_api:")
+        # self.log(True, "D", None, ":store_or_update_orders_from_api:")
 
         for order in orders_data['orders']:
             # pp(order)
 
-            with self.flask_app.app_context():  # Ensure you're within the Flask app context
+            with self.app.app_context():  # Ensure you're within the Flask app context
                 # Try to find an existing order by order_id
                 existing_order = FuturesOrder.query.filter_by(order_id=order.get('order_id')).first()
-                # self.log.log(True, "I", "existing order", existing_order)
+                # self.log(True, "I", "existing order", existing_order)
 
                 if existing_order:
                     pass
@@ -970,25 +972,25 @@ class CoinbaseAdvAPI:
                     # print("Order stored or updated successfully.")
                 except Exception as e:
                     db.session.rollback()
-                    self.log.log(True, "E",
+                    self.log(True, "E",
                                  "Failed to store or update order", (e))
 
     def update_order_fields(self, client_order_id: str, field_values: dict = None):
-        self.log.log(True, "D", None, ":update_order_fields:")
-        # self.log.log(True, "I", "field_values", field_values)
+        self.log(True, "D", None, ":update_order_fields:")
+        # self.log(True, "I", "field_values", field_values)
 
-        with self.flask_app.app_context():  # Push an application context
+        with self.app.app_context():  # Push an application context
             try:
                 if client_order_id:
                     # Query for an existing order
                     order = FuturesOrder.query.filter_by(client_order_id=client_order_id).first()
-                    self.log.log(True, "I", "    found order", order)
+                    self.log(True, "I", "    found order", order)
 
                     if order and field_values:
                         # Order exists, update its details
                         for field, value in field_values.items():
-                            # self.log.log(True, "I", "field", field)
-                            # self.log.log(True, "I", "value", value)
+                            # self.log(True, "I", "field", field)
+                            # self.log(True, "I", "value", value)
 
                             # Set the order field with the value
                             # Dynamically set the attribute based on field name
@@ -996,23 +998,23 @@ class CoinbaseAdvAPI:
 
                         # Commit changes or new entry to the database
                         db.session.commit()
-                        self.log.log(True, "I", "Order Client ID",
+                        self.log(True, "I", "Order Client ID",
                                      client_order_id, "  field values updated")
 
                         return "    Successfully updated order record"
                 else:
-                    self.log.log(True, "W", None,
+                    self.log(True, "W", None,
                                  "No Client Order ID provided or order creation failed. Check input data.")
                     return f"   No Client Order ID provided client_order_id: {client_order_id}"
             except db_errors as e:
-                self.log.log(True, "E",
+                self.log(True, "E",
                              "    Error either getting or storing the Order record",
                              str(e))
                 db.session.rollback()
                 return "    update_order_fields - Database Error"
 
     def close_position(self, client_order_id, product_id, contract_size):
-        self.log.log(True, "I", None, ":close_position:")
+        self.log(True, "I", None, ":close_position:")
         """
         Closing Futures Positions
             When a contract expires, we automatically close your open position at the exchange 
@@ -1030,6 +1032,6 @@ class CoinbaseAdvAPI:
         close_position = self.client.close_position(client_order_id=client_order_id,
                                                     product_id=product_id,
                                                     size=contract_size)
-        self.log.log(True, "I", "close", close_position)
+        self.log(True, "I", "close", close_position)
 
         return close_position

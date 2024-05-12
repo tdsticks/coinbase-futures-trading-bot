@@ -1,33 +1,28 @@
-from db import db, db_errors, joinedload
 from collections import defaultdict
 from datetime import datetime
 import pytz
-import configparser
-import logs
 
 # Models
-from models.signals import AuroxSignal, FuturePriceAtSignal
-
-config = configparser.ConfigParser()
-config.read('bot_config.ini')
-config.sections()
+from app.models.signals import AuroxSignal, FuturePriceAtSignal
 
 
 class SignalProcessor:
-    def __init__(self, flask_app, cbapi):
-        self.flask_app = flask_app
-        # self.cb_adv_api = CoinbaseAdvAPI(flask_app)
+    def __init__(self, app):
+        self.app = app
+        self.log = app.custom_log.log
+
+        self.db = self.app.db
+
         self.cb_adv_api = cbapi
         # self.tm = trade_manager
-        self.log = logs.Log(self.flask_app)
-        self.config = config
+
         self.signals = {}
         self.signal_weights = {}
         self.load_signal_weights()
-        self.log.log(True, "D", None, ":Initializing SignalProcessor:")
+        self.log(True, "D", None, ":Initializing SignalProcessor:")
 
     def write_db_signal(self, data, trade_manager):
-        self.log.log(True, "I", None, ":write_db_signal:")
+        self.log(True, "I", None, ":write_db_signal:")
 
         # TODO: May need to convert these timestamps from Aurox as they're in ISO format
 
@@ -36,13 +31,13 @@ class SignalProcessor:
         # Create a new AuroxSignal object from received data
         # Also write a record using the signal spot price, futures bid and ask
         #   and store the relationship ids to both
-        with self.flask_app.app_context():  # Push an application context
+        with self.app.app_context():  # Push an application context
             try:
                 # Convert timestamp to datetime object if necessary
                 # timestamp = data['timestamp']
                 timestamp = datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
                 timestamp = timestamp.replace(tzinfo=pytz.utc)
-                # self.log.log(True, "I", "timestamp", timestamp)
+                # self.log(True, "I", "timestamp", timestamp)
 
                 signal_spot_price = data['price'].replace(',', '')
 
@@ -55,7 +50,7 @@ class SignalProcessor:
                 # Attempt to find an existing signal with the same trading pair and time unit
                 existing_signal = AuroxSignal.query.filter_by(**unique_key).order_by(
                     AuroxSignal.timestamp.desc()).first()
-                self.log.log(True, "I", "    > Existing Signal", existing_signal)
+                self.log(True, "I", "    > Existing Signal", existing_signal)
 
                 new_signal = None
 
@@ -67,7 +62,7 @@ class SignalProcessor:
                         existing_signal.price = signal_spot_price
                         existing_signal.signal = data['signal']
                         db.session.add(existing_signal)
-                        self.log.log(True, "I", "    > Updated existing signal", existing_signal)
+                        self.log(True, "I", "    > Updated existing signal", existing_signal)
                     else:
                         # Create a new signal if none exists for the specific time unit and trading pair
                         new_signal = AuroxSignal(
@@ -78,13 +73,13 @@ class SignalProcessor:
                             time_unit=data['timeUnit']
                         )
                         db.session.add(new_signal)
-                        self.log.log(True, "I", "    > Stored new signal", new_signal)
+                        self.log(True, "I", "    > Stored new signal", new_signal)
 
                     db.session.commit()  # Commit changes at the end of processing
                     signal_stored = True
 
                 except db_errors as e:
-                    self.log.log(True, "E",
+                    self.log(True, "E",
                                  "    >>> Error with storing or retrieving AuroxSignal",
                                  str(e))
                     db.session.rollback()
@@ -93,7 +88,7 @@ class SignalProcessor:
 
                 # Now, get the bid and ask prices for the current futures product
                 relevant_future_product = self.cb_adv_api.get_relevant_future_from_db(month_override=next_month)
-                self.log.log(True, "I", "relevant_future_product product_id",
+                self.log(True, "I", "relevant_future_product product_id",
                              relevant_future_product.product_id)
 
                 # Get the current bid and ask prices for the futures product related to this signal
@@ -102,28 +97,29 @@ class SignalProcessor:
                 try:
                     future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(
                         relevant_future_product.product_id)
-                    future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
-                    future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+                    if 'pricebooks' in future_bid_ask_price:
+                        future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+                        future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
                 except AttributeError as e:
-                    self.log.log(True, "E",
+                    self.log(True, "E",
                                  "Unable to get Future Bid and Ask Prices",
                                  "AttributeError:", e)
                 except ValueError as e:
-                    self.log.log(True, "E",
+                    self.log(True, "E",
                                  "Unable to get Future Bid and Ask Prices",
                                  "ValueError:", e)
 
                 if next_months_product_id:
-                    self.log.log(True, "I",
+                    self.log(True, "I",
                                  "    > next_months_product_id", next_months_product_id)
-                    self.log.log(True, "I",
+                    self.log(True, "I",
                                  "    > next_month", next_month)
 
                 if new_signal:
                     signal_id = new_signal.id
                 else:
                     signal_id = existing_signal.id
-                self.log.log(True, "I", "    > Signal ID", signal_id)
+                self.log(True, "I", "    > Signal ID", signal_id)
 
                 try:
                     # Find the related futures product based on the current futures product
@@ -135,7 +131,7 @@ class SignalProcessor:
                             existing_future_price_signal.future_bid_price = future_bid_price
                             existing_future_price_signal.future_ask_price = future_ask_price
                             existing_future_price_signal.future_id = relevant_future_product.id
-                            self.log.log(True, "I", "Updated existing future price signal details")
+                            self.log(True, "I", "Updated existing future price signal details")
                         else:
                             # If no existing record, create a new one
                             new_future_price_signal = FuturePriceAtSignal(
@@ -146,25 +142,25 @@ class SignalProcessor:
                                 future_id=relevant_future_product.id
                             )
                             db.session.add(new_future_price_signal)
-                            self.log.log(True, "I", "Stored new future price signal")
+                            self.log(True, "I", "Stored new future price signal")
                         db.session.commit()
                 except db_errors as e:
-                    self.log.log(True, "E",
+                    self.log(True, "E",
                                  "    >>> Error with storing or retrieving FuturePriceAtSignal",
                                  str(e))
                     db.session.rollback()
             except db_errors as e:
-                self.log.log(True, "E",
+                self.log(True, "E",
                              "    >>> Error with storing or retrieving the Aurox signal",
                              str(e))
 
         return signal_stored
 
     def get_latest_weekly_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_weekly_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             # Query the latest weekly signal including related future price data
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
@@ -177,10 +173,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_five_day_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_five_day_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
 
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
@@ -193,10 +189,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_three_day_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_three_day_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
 
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
@@ -209,10 +205,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_two_day_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_two_day_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
 
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
@@ -225,10 +221,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_daily_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_daily_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
 
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
@@ -241,10 +237,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_twelve_hr_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_12_hourly_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '12 Hours') \
@@ -256,10 +252,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_eight_hr_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_8_hourly_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '8 Hours') \
@@ -271,10 +267,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_six_hr_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_6_hour_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '6 Hours') \
@@ -286,10 +282,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_four_hr_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_4_hourly_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '4 Hours') \
@@ -301,10 +297,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_three_hr_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_3_hour_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '3 Hours') \
@@ -316,10 +312,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_two_hr_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_2_hour_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '2 Hours') \
@@ -331,10 +327,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_one_hour_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_1_hour_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '1 Hour') \
@@ -346,10 +342,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_thirty_min_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_30_minute_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '30 Minutes') \
@@ -361,10 +357,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_twenty_min_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_20_minute_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '20 Minutes') \
@@ -376,10 +372,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_fifteen_min_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_15_minute_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '15 Minutes') \
@@ -391,10 +387,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_ten_min_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_10_minute_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '10 Minutes') \
@@ -406,10 +402,10 @@ class SignalProcessor:
                 return None
 
     def get_latest_five_min_signal(self):
-        # self.log.log(True, "D", None,
+        # self.log(True, "D", None,
         #                         ":get_latest_5_minute_signal:")
 
-        with self.flask_app.app_context():
+        with self.app.app_context():
             latest_signal = AuroxSignal.query \
                 .options(joinedload(AuroxSignal.future_prices)) \
                 .filter(AuroxSignal.time_unit == '5 Minutes') \
@@ -422,10 +418,10 @@ class SignalProcessor:
 
     def load_signal_weights(self):
         """Load and cache signal weights from configuration."""
-        for key in ['weekly', 'five_day', 'three_day', 'two_day', 'daily', 'twelve_hr',
-                    'eight_hr', 'six_hr', 'four_hr', 'three_hr', 'two_hr', 'one_hour',
-                    'thirty_min', 'twenty_min', 'fifteen_min', 'ten_min', 'five_min']:
-            self.signal_weights[key] = float(self.config['trade.conditions'][f'{key}_weight'])
+        for key in ['WEEKLY', 'FIVE_DAY', 'THREE_DAY', 'TWO_DAY', 'DAILY', 'TWELVE_HR',
+                    'EIGHT_HR', 'SIX_HR', 'FOUR_HR', 'THREE_HR', 'TWO_HR', 'ONE_HOUR',
+                    'THIRTY_MIN', 'TWENTY_MIN', 'FIFTEEN_MIN', 'TEN_MIN', 'FIVE_MIN']:
+            self.signal_weights[key] = float(self.app.config[f'{key}_WEIGHT'])
 
     def fetch_signals(self):
         """Fetch latest signals for all time frames."""
@@ -435,7 +431,7 @@ class SignalProcessor:
                 # print("method_name:", method_name)
                 self.signals[key] = getattr(self, method_name)()
             else:
-                self.log.log(True, "E", None, f"Method not found: {method_name}")
+                self.log(True, "E", None, f"Method not found: {method_name}")
                 self.signals[key] = None
 
     def calculate_scores(self):
@@ -523,7 +519,7 @@ class SignalProcessor:
                    f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
             trading_permitted = True
 
-        self.log.log(True, "I", "Trading Message", msg)
+        self.log(True, "I", "Trading Message", msg)
         return trading_permitted
 
     def run(self):
@@ -533,7 +529,7 @@ class SignalProcessor:
         group1 = {}
         group2 = {}
         group3 = {}
-        trade_direction = 'Neutral'
+        trade_direction = 'neutral'
 
         for group, score in scores.items():
             # print(f"\n Group: {group} Score: {score}")
@@ -545,7 +541,7 @@ class SignalProcessor:
             # print(f" normalized_score: {normalized_score}")
 
             strength = self.decide_direction_strength(normalized_score)
-            self.log.log(True, "I", f"{group.upper()}"
+            self.log(True, "I", f"{group.upper()}"
                                     f" | Direction: {direction.upper()}"
                                     f" | Strength: {strength.upper()}"
                                     f" | Normalized Score: {normalized_score}")
@@ -570,19 +566,9 @@ class SignalProcessor:
         groups["group3"] = group3
 
         trading_permitted = self.should_enter_trade(group1, group2, group3)
-        # self.log.log(True, "I", " >>> Trade Permitted", trading_permitted)
+        # self.log(True, "I", " >>> Trade Permitted", trading_permitted)
 
         if trading_permitted:
             trade_direction = group3['direction']
 
         return trading_permitted, trade_direction, groups
-
-# Usage
-# TradeManager class
-# app, mail_cls = flask_app
-# tm = TradeManager(app, mail_cls)
-# cb_adv_api = CoinbaseAdvAPI(app, mail_cls)
-
-# Signal Process runs within the Trade Manager Class above
-# self.signal_processor = SignalProcessor(app, cb_adv_api)
-# self.signal_processor.run()

@@ -13,3 +13,5 @@ PyMySQL==1.1.0
 # numpy==1.26.4
 # pandas==2.2.2
 Flask-Mail==0.9.1
+flask-login==0.6.3
+flask-bcrypt==1.0.1

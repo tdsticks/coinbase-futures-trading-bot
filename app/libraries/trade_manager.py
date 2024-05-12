@@ -1,7 +1,7 @@
 import configparser
 import os
 from datetime import datetime, time
-import logs
+from app.libraries import logs
 import pytz
 from dotenv import load_dotenv
 
@@ -11,7 +11,7 @@ from signals_processor import SignalProcessor
 from email_manager import EmailManager
 
 # Models
-from models.futures import (FuturePosition)
+from app.models.futures import (FuturePosition)
 
 load_dotenv()
 
@@ -36,8 +36,8 @@ class TradeManager:
         self.log.log(True, "D", None, ":Initializing TradeManager:")
 
     def check_for_contract_expires(self):
-        self.log.log(True, "D", None,
-                     ":NEW_check_for_contract_expires:")
+        # self.log.log(True, "D", None,
+        #              ":NEW_check_for_contract_expires:")
 
         # NOTE: Futures markets are open for trading from Sunday 6 PM to
         #  Friday 5 PM ET (excluding observed holidays),
@@ -148,7 +148,7 @@ class TradeManager:
         #   if we're carefully. We also need to adjust the closing Long or Short order we'll place to
         #   help with risk management and taking profit.
 
-        size = "1"
+        # size = "1"
         leverage = "3"
         order_type = "limit_limit_gtc"
         cur_future_price = ""
@@ -161,12 +161,12 @@ class TradeManager:
             # print("cur_future_price:", cur_future_price)
         else:
             cur_future_price = manual_price
-        self.log.log(True, "I", "cur_future_price", cur_future_price)
+        # self.log.log(True, "I", "cur_future_price", cur_future_price)
 
         # dca_note_list = ['DCA1', 'DCA2', 'DCA3', 'DCA4', 'DCA5']
         dca_note_list = ["DCA" + str(x) for x in range(1, quantity + 1)]
-        self.log.log(True, "I", "    dca_note_list",
-                     dca_note_list)
+        # self.log.log(True, "I", "    dca_note_list",
+        #              dca_note_list)
 
         # Generate the DCA percentages list dynamically based on 'quantity'
         # dca_per_offset_list = [0.01, 0.02, 0.03, 0.04, 0.05]
@@ -174,24 +174,24 @@ class TradeManager:
             float(config['dca.ladder.trade_percentages'][f'dca_trade_{i + 1}_per'])
             for i in range(quantity)
         ]
-        self.log.log(True, "I", "    dca_per_offset_list",
-                     dca_per_offset_list)
+        # self.log.log(True, "I", "    dca_per_offset_list",
+        #              dca_per_offset_list)
 
         dca_contract_size_list = [
             str(config['dca.ladder.trade_percentages'][f'dca_trade_{i + 1}_contracts'])
             for i in range(quantity)
         ]
-        self.log.log(True, "I", "    dca_contract_size_list",
-                     dca_contract_size_list)
+        # self.log.log(True, "I", "    dca_contract_size_list",
+        #              dca_contract_size_list)
 
         def create_dca_orders():
             for i, note in enumerate(dca_note_list):
                 if i <= quantity - 1:
                     dcg_limit_price = ""
                     dca_trade_per_offset = int(float(cur_future_price) * dca_per_offset_list[i])
-                    self.log.log(True, "D",
-                                 "   DCA Trade Per Offset",
-                                 dca_trade_per_offset)
+                    # self.log.log(True, "D",
+                    #              "   DCA Trade Per Offset",
+                    #              dca_trade_per_offset)
 
                     # Calculate the DCA orders (Long or Short)
                     if side == "BUY":  # BUY / LONG
@@ -285,14 +285,12 @@ class TradeManager:
         # print("Future Positions:")
         # pp(future_positions)
 
+        five_min_signals = self.signal_processor.get_latest_five_min_signal()
         fifteen_min_signals = self.signal_processor.get_latest_fifteen_min_signal()
 
         trading_permitted, trade_direction, groups = self.signal_processor.run()
         self.log.log(True, "I", " >>> Trade Permitted", trading_permitted)
         self.log.log(True, "I", " >>> Trade Direction", trade_direction)
-        # self.log.log(True, "I", " >>> Group Data", groups)
-        # for group in groups:
-        #     self.log.log(True, "I", " >>> Group Data", groups[group])
 
         # Make sure we have a future position
         if len(future_positions['positions']) > 0:
@@ -336,203 +334,225 @@ class TradeManager:
                              "    >>> NO Current Position Order Found", cur_position_order)
         else:
             self.log.log(True, "I", None, " >>> No Open Position")
-            self.log.log(True, "I", None,
-                         " >>> Check if its a good market to place a trade")
 
-            # NOTE: Check to cancel any OPEN orders and cancel them
+            if trading_permitted:
+                self.log.log(True, "I", None, " >>> Trading permitted, "
+                                              "check if its a good market to place a trade")
 
-            future_contract = self.cb_adv_api.get_relevant_future_from_db()
-            remaining_open_orders = self.cb_adv_api.list_orders(product_id=future_contract.product_id,
-                                                                order_status="OPEN")
-            if 'orders' in remaining_open_orders:
-                self.log.log(True, "D",
-                             "remaining_open_orders count",
-                             len(remaining_open_orders['orders']))
-                order_ids = []
-                client_order_ids = []
-                for order in remaining_open_orders['orders']:
-                    order_ids.append(order['order_id'])
-                    client_order_ids.append(order['client_order_id'])
+                # NOTE: Check to cancel any OPEN orders and cancel them
 
-                # Pass the order_id as a list. Can place multiple order ids if necessary,
-                #   but not in this case
-                cancelled_order = self.cb_adv_api.cancel_order(order_ids=order_ids)
-                self.log.log(True, "I", "    > cancelled_order", cancelled_order)
+                future_contract = self.cb_adv_api.get_relevant_future_from_db()
+                remaining_open_orders = self.cb_adv_api.list_orders(product_id=future_contract.product_id,
+                                                                    order_status="OPEN")
+                if 'orders' in remaining_open_orders:
 
-                field_values = {
-                    "bot_active": 0,
-                    "order_status": "CANCELLED"
-                }
+                    order_ids = []
+                    client_order_ids = []
 
-                # for order in remaining_open_orders['orders']:
-                for client_order_id in client_order_ids:
-                    # Update order so we don't the system doesn't try to use it for future orders
-                    updated_cancelled_order = self.cb_adv_api.update_order_fields(
-                        client_order_id=client_order_id,
-                        field_values=field_values
-                    )
-                    self.log.log(True, "I", "    > updated_cancelled_order", updated_cancelled_order)
+                    if len(remaining_open_orders['orders']) > 0:
+                        self.log.log(True, "I",
+                                     "Remaining Open Orders Count",
+                                     len(remaining_open_orders['orders']))
 
-                # Now, update an other Future Order records setting bot_active = 0
-                self.cb_adv_api.update_bot_active_orders()
+                        for order in remaining_open_orders['orders']:
+                            order_ids.append(order['order_id'])
+                            client_order_ids.append(order['client_order_id'])
 
-            #
-            # If our overall position trade direction isn't neutral, then proceed
-            #
-            if trade_direction != "neutral":
-                self.log.log(True, "I", None,
-                             "-----------------------------------")
-                if trade_direction == 'long':
-                    self.log.log(True, "I", None,
-                                 " >>> Signals are strong bullish, "
-                                 "see if we should place a trade on the 15 min")
-                else:
-                    self.log.log(True, "I", None,
-                                 " >>> Signals are strong bearish, "
-                                 "see if we should place a trade on the 15 min")
+                        # Pass the order_id as a list. Can place multiple order ids if necessary,
+                        #   but not in this case
+                        cancelled_order = self.cb_adv_api.cancel_order(order_ids=order_ids)
+                        self.log.log(True, "I", "    > cancelled_order", cancelled_order)
 
-                # NOTE: Next, let's look at the fifteen minute and how close to the
-                #  last signal and price of when we should place a limit order.
-                #  How are in price are we away from the last signal?
-                #  What is a good price threshold?
-                #  Is 15 Minute signal side the same as the signal_calc_trade_direction side?
+                        field_values = {
+                            "bot_active": 0,
+                            "order_status": "CANCELLED"
+                        }
 
-                fifteen_min_trade_signal = fifteen_min_signals.signal
-                self.log.log(True, "I", None, " >>> 15 Min Signal Direction", fifteen_min_trade_signal)
-                self.log.log(True, "I", None, " >>> Trade Signal Direction", trade_direction)
+                        # for order in remaining_open_orders['orders']:
+                        for client_order_id in client_order_ids:
+                            # Update order so we don't the system doesn't try to use it for future orders
+                            updated_cancelled_order = self.cb_adv_api.update_order_fields(
+                                client_order_id=client_order_id,
+                                field_values=field_values
+                            )
+                            self.log.log(True, "I", "    > updated_cancelled_order", updated_cancelled_order)
 
-                # NOTE: Does the 15 Min match the overall signal trade direction of the Aurox signals?
-
-                if fifteen_min_trade_signal == trade_direction:
-                    self.log.log(True, "I", None,
-                                 "   >>> YES, the 15 Min matches the overall trade direction")
-
-                    # Check to see if next months product id is populated
-                    if next_months_product_id is None:
-                        # Get this months current product
-                        relevant_future_product = self.cb_adv_api.get_relevant_future_from_db()
-                        self.log.log(True, "I", "    Relevant Future Product",
-                                     relevant_future_product.product_id)
-                        product_id = relevant_future_product.product_id
+                        # Now, update an other Future Order records setting bot_active = 0
+                        self.cb_adv_api.update_bot_active_orders()
                     else:
-                        product_id = next_months_product_id
+                        self.log.log(True, "I", " No Remaining Open Orders")
 
-                    bid_price, ask_price, avg_price = self.cb_adv_api.get_current_average_price(product_id=product_id)
-                    self.log.log(True, "I",
-                                 "   bid ask avg_price", avg_price)
-
-                    limit_price = self.cb_adv_api.adjust_price_to_nearest_increment(avg_price)
-                    self.log.log(True, "I",
-                                 "   Current Limit Price", limit_price)
-
-                    fifteen_min_future_avg_price = 0
-                    for future_price in fifteen_min_signals.future_prices:
-                        future_bid_price = future_price.future_bid_price
-                        future_ask_price = future_price.future_ask_price
-                        fifteen_min_future_avg_price = round((future_bid_price + future_ask_price) / 2)
-                    self.log.log(True, "I",
-                                 "   Fifteen Min Future Avg Price",
-                                 fifteen_min_future_avg_price)
-
-                    # Just setting a high default number to check again
-                    percentage_diff = 10
-
-                    # LONG = BUY
-                    # SHORT = SELL
-                    trade_side = ""
-
-                    # The signal price should be lower than current price (price rising)
-                    check_signal_and_current_price_diff = 0
+                #
+                # If our overall position trade direction isn't neutral, then proceed
+                #
+                if trade_direction != "neutral":
+                    self.log.log(True, "I", None,
+                                 "-----------------------------------")
                     if trade_direction == 'long':
-                        trade_side = "BUY"
-                        check_signal_and_current_price_diff = int(limit_price) - int(fifteen_min_future_avg_price)
-                        percentage_diff = round((check_signal_and_current_price_diff
-                                                 / int(fifteen_min_future_avg_price)) * 100, 2)
-
-                    elif trade_direction == 'short':
-                        trade_side = "SELL"
-                        check_signal_and_current_price_diff = int(fifteen_min_future_avg_price) - int(limit_price)
-                        percentage_diff = round((check_signal_and_current_price_diff
-                                                 / int(fifteen_min_future_avg_price)) * 100, 2)
-
-                    # NOTE: Make sure the price difference from the 15 Min signal and current price
-                    #   isn't too far off or beyond 1%, so we try to be safe and get more profit
-
-                    # Set a limit value is here (1 = 1%)
-                    # percentage_diff_limit = 1
-                    percentage_diff_limit = float(config['trade.conditions']['percentage_diff_limit'])
-                    per_diff_msg = (f"   >>> Checking! Signal Direction "
-                                    f"{trade_direction} "
-                                    f" Per Diff {percentage_diff}% < {percentage_diff_limit}% Limit")
-                    self.log.log(True, "I", None, per_diff_msg)
-
-                    if percentage_diff < percentage_diff_limit:
-                        good_per_diff_msg = (f"   >>> Proceeding! current price diff of "
-                                             f"{check_signal_and_current_price_diff} "
-                                             f"which is {percentage_diff}%")
-                        self.log.log(True, "W", None, good_per_diff_msg)
-
-                        size = "1"
-                        leverage = "3"
-                        order_type = "limit_limit_gtc"
-                        order_msg = (f"    >>> Trade side:{trade_side} Order type:{order_type} "
-                                     f"Limit Price:{limit_price} Size:{size} Leverage:{leverage}")
-                        self.log.log(True, "I", None, order_msg)
-
-                        # Create a new MAIN order
-                        order_created = self.cb_adv_api.create_order(side=trade_side,
-                                                                     product_id=product_id,
-                                                                     size=size,
-                                                                     limit_price=limit_price,
-                                                                     leverage=leverage,
-                                                                     order_type=order_type,
-                                                                     bot_note="MAIN")
-                        print("MAIN order_created:", order_created)
-
-                        email_body = (f"New Order Placed!"
-                                      f"\nTrade side:{trade_side}"
-                                      f"\nOrder type:{order_type} "
-                                      f"\nLimit Price:{limit_price}"
-                                      f"\nSize:{size}"
-                                      f"\nLeverage:{leverage}")
-                        self.email_mgr.send_email(subject="New Order Placed!",
-                                                  body=email_body)
-
-                        # TODO: Need to see if the MAIN order is filled first before placing ladder orders
-
-                        # How many ladder orders? (10 max)
-                        # ladder_order_qty = 8
-                        ladder_order_qty = int(config['dca.ladder.trade_percentages']['ladder_quantity'])
-
-                        # Create the DCA ladder orders
-                        self.ladder_orders(quantity=ladder_order_qty,
-                                           side=trade_side,
-                                           product_id=product_id,
-                                           bid_price=bid_price,
-                                           ask_price=ask_price)
+                        self.log.log(True, "I", None,
+                                     " >>> Signals are strong bullish, "
+                                     "see if we should place a trade using the 5 & 15 min signals")
                     else:
-                        bad_per_diff_msg = (f"   >>> Holding off, current price diff of "
-                                            f"{check_signal_and_current_price_diff} "
-                                            f"which is {percentage_diff}%")
-                        self.log.log(True, "W", None, bad_per_diff_msg)
+                        self.log.log(True, "I", None,
+                                     " >>> Signals are strong bearish, "
+                                     "see if we should place a trade using the 5 & 15 min signals")
+
+                    # NOTE: Next, let's look at the fifteen minute and how close to the
+                    #  last signal and price of when we should place a limit order.
+                    #  How are in price are we away from the last signal?
+                    #  What is a good price threshold?
+                    #  Is 15 Minute signal side the same as the signal_calc_trade_direction side?
+
+                    five_min_trade_signal = five_min_signals.signal
+                    fifteen_min_trade_signal = fifteen_min_signals.signal
+                    self.log.log(True, "I", None, " >>> 5 Min Signal Direction", five_min_trade_signal)
+                    self.log.log(True, "I", None, " >>> 15 Min Signal Direction", fifteen_min_trade_signal)
+                    self.log.log(True, "I", None, " >>> Trade Signal Direction", trade_direction)
+
+                    # NOTE: Does the 15 Min match the overall signal trade direction of the Aurox signals?
+
+                    if five_min_trade_signal == trade_direction and fifteen_min_trade_signal == trade_direction:
+                        self.log.log(True, "I", None,
+                                     "   >>> YES, the 5 Min & 15 Min matches the overall trade direction")
+
+                        # Check to see if next months product id is populated
+                        if next_months_product_id is None:
+                            # Get this months current product
+                            relevant_future_product = self.cb_adv_api.get_relevant_future_from_db()
+                            self.log.log(True, "I", "    Relevant Future Product",
+                                         relevant_future_product.product_id)
+                            product_id = relevant_future_product.product_id
+                        else:
+                            product_id = next_months_product_id
+
+                        bid_price, ask_price, avg_price = (
+                            self.cb_adv_api.get_current_average_price(product_id=product_id))
+                        self.log.log(True, "I",
+                                     "   bid ask avg_price", avg_price)
+
+                        limit_price = self.cb_adv_api.adjust_price_to_nearest_increment(avg_price)
+                        self.log.log(True, "I",
+                                     "   Current Limit Price", limit_price)
+
+                        fifteen_min_future_avg_price = 0
+                        for future_price in fifteen_min_signals.future_prices:
+                            future_bid_price = future_price.future_bid_price
+                            future_ask_price = future_price.future_ask_price
+                            fifteen_min_future_avg_price = round((future_bid_price + future_ask_price) / 2)
+                        self.log.log(True, "I",
+                                     "   Fifteen Min Future Avg Price",
+                                     fifteen_min_future_avg_price)
+
+                        # Just setting a high default number to check again
+                        percentage_diff = 10
+
+                        # LONG = BUY
+                        # SHORT = SELL
+                        trade_side = ""
+
+                        # The signal price should be lower than current price (price rising)
+                        check_signal_and_current_price_diff = 0
+                        if trade_direction == 'long':
+                            trade_side = "BUY"
+                            check_signal_and_current_price_diff = int(limit_price) - int(fifteen_min_future_avg_price)
+                            percentage_diff = round((check_signal_and_current_price_diff
+                                                     / int(fifteen_min_future_avg_price)) * 100, 2)
+
+                        elif trade_direction == 'short':
+                            trade_side = "SELL"
+                            check_signal_and_current_price_diff = int(fifteen_min_future_avg_price) - int(limit_price)
+                            percentage_diff = round((check_signal_and_current_price_diff
+                                                     / int(fifteen_min_future_avg_price)) * 100, 2)
+
+                        # NOTE: Make sure the price difference from the 15 Min signal and current price
+                        #   isn't too far off or beyond 1%, so we try to be safe and get more profit
+
+                        # Set a limit value is here (1 = 1%)
+                        # percentage_diff_limit = 1
+                        percentage_diff_limit = float(config['trade.conditions']['percentage_diff_limit'])
+                        per_diff_msg = (f"   >>> Checking! Signal Direction "
+                                        f"{trade_direction} "
+                                        f" Per Diff {percentage_diff}% < {percentage_diff_limit}% Limit")
+                        self.log.log(True, "I", None, per_diff_msg)
+
+                        if percentage_diff < percentage_diff_limit:
+                            good_per_diff_msg = (f"   >>> Proceeding! current price diff of "
+                                                 f"{check_signal_and_current_price_diff} "
+                                                 f"which is {percentage_diff}%")
+                            self.log.log(True, "W", None, good_per_diff_msg)
+
+                            # size = "1"
+                            size = str(config['first.order']['contract_size'])
+                            # leverage = "3"
+                            leverage = str(config['first.order']['leverage'])
+                            order_type = "limit_limit_gtc"
+                            order_msg = (f"    >>> Trade side:{trade_side} Order type:{order_type} "
+                                         f"Limit Price:{limit_price} Size:{size} Leverage:{leverage}")
+                            self.log.log(True, "I", None, order_msg)
+
+                            # Create a new MAIN order
+                            order_created = self.cb_adv_api.create_order(side=trade_side,
+                                                                         product_id=product_id,
+                                                                         size=size,
+                                                                         limit_price=limit_price,
+                                                                         leverage=leverage,
+                                                                         order_type=order_type,
+                                                                         bot_note="MAIN")
+                            print("MAIN order_created:", order_created)
+
+                            if order_created:
+                                email_body = (f"New Order Placed!"
+                                              f"\nTrade side:{trade_side}"
+                                              f"\nOrder type:{order_type} "
+                                              f"\nLimit Price:{limit_price}"
+                                              f"\nSize:{size}"
+                                              f"\nLeverage:{leverage}")
+                                self.email_mgr.send_email(subject="New Order Placed!",
+                                                          body=email_body)
+
+                            # TODO: Need to see if the MAIN order is filled first before placing ladder orders
+
+                            # How many ladder orders? (10 max)
+                            # ladder_order_qty = 8
+                            ladder_order_qty = int(config['dca.ladder.trade_percentages']['ladder_quantity'])
+
+                            # Create the DCA ladder orders
+                            self.ladder_orders(quantity=ladder_order_qty,
+                                               side=trade_side,
+                                               product_id=product_id,
+                                               bid_price=bid_price,
+                                               ask_price=ask_price)
+                        else:
+                            bad_per_diff_msg = (f"   >>> Holding off, current price diff of "
+                                                f"{check_signal_and_current_price_diff} "
+                                                f"which is {percentage_diff}%")
+                            self.log.log(True, "W", None, bad_per_diff_msg)
+                    else:
+                        self.log.log(True, "W", None,
+                                     "   >>> NO, the 5 Min and 15 Min does not match the overall trade direction")
+                        five_min_pos_trade_dir_msg = (f"     >>> 5 Min Signal: {five_min_trade_signal} "
+                                                         f"!= Signal Trade Direction: {trade_direction}")
+                        fifteen_min_pos_trade_dir_msg = (f"     >>> 15 Min Signal: {fifteen_min_trade_signal} "
+                                                         f"!= Signal Trade Direction: {trade_direction}")
+                        self.log.log(True, "W", None,
+                                     five_min_pos_trade_dir_msg)
+                        self.log.log(True, "W", None,
+                                     fifteen_min_pos_trade_dir_msg)
                 else:
                     self.log.log(True, "W", None,
-                                 "   >>> NO, the 15 Min does not match the overall trade direction")
-                    fifteen_min_pos_trade_dir_msg = (f"     >>> 15 Min Signal: {fifteen_min_trade_signal} "
-                                                     f"!= Signal Trade Direction: {trade_direction}")
-                    self.log.log(True, "W", None,
-                                 fifteen_min_pos_trade_dir_msg)
+                                 "\nSignal score is neutral, let's wait...", )
+                    for group in groups:
+                        self.log.log(True, "I", None, "   >>> ", group)
+                        self.log.log(True, "I", None, "       > Direction", groups[group]['direction'])
+                        self.log.log(True, "I", None, "       > Strength", groups[group]['strength'])
+                        self.log.log(True, "I", None, "       > Score", groups[group]['score'])
+                        self.log.log(True, "I", None, "       > Normalized Score",
+                                     groups[group]['normalized_score'], "\n")
+                        self.log.log(True, "I", None, "\n")
             else:
                 self.log.log(True, "W", None,
-                             "\nSignal score is neutral, let's wait...", )
-                for group in groups:
-                    self.log.log(True, "I", "   >>> ", group, "\n")
-                    self.log.log(True, "I", "       > Direction", groups[group]['direction'], "\n")
-                    self.log.log(True, "I", "       > Strength", groups[group]['strength'], "\n")
-                    self.log.log(True, "I", "       > Score", groups[group]['score'], "\n")
-                    self.log.log(True, "I", "       > Normalized Score",
-                                 groups[group]['normalized_score'], "\n")
-                    self.log.log(True, "I", "\n")
+                             "\nTrading isn't permitted based on the "
+                             "score and direction, let's wait...", )
 
     def place_trade_and_ladder(self):
         self.log.log(True, "D", None, "--------------------------")
@@ -745,7 +765,7 @@ class TradeManager:
 
             # take_profit_percentage = 0.01
             take_profit_percentage = float(config['take.profit.order']['take_profit_percentage'])
-            tp_per_msg = f" Take Profit Percentage: {take_profit_percentage * 100}%"
+            tp_per_msg = f" > Take Profit Percentage: {take_profit_percentage * 100}%"
             self.log.log(True, "I", None, tp_per_msg)
 
             # Calculate the take profit price (Long or Short)

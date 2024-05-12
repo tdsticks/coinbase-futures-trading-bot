@@ -1,0 +1,23 @@
+/* static/css/darkmode.css */
+body {
+    background-color: #333;
+    color: #ccc;
+}
+
+.navbar {
+    background-color: #222;
+}
+
+.table {
+    background-color: #222;
+    color: #ccc;
+}
+
+.form-control {
+    background-color: #555;
+    color: #ddd;
+}
+
+.label {
+    color: #ccc;
+}

@@ -5,13 +5,17 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY')
     SQLALCHEMY_DATABASE_URI = os.getenv('SQLALCHEMY_DATABASE_URI')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    DEBUG = os.getenv('DEBUG', 'False') == 'True'
+    DEBUG = os.getenv('DEBUG', False)
+    API_KEY = os.getenv('API_KEY')
+    API_SECRET = os.getenv('API_SECRET')
+    # UUID = os.getenv('UUID')
     MAIL_SERVER = 'smtp.gmail.com'
     MAIL_PORT = 587
     MAIL_USERNAME = os.getenv('MAIL_USERNAME')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
     MAIL_USE_TLS = True
     MAIL_USE_SSL = False
+    MAIL_DEBUG = False
 
     #
     # NOTE: Only change these if you know what you're doing!
@@ -21,15 +25,15 @@ class Config:
     #   Adjust the timing of each APScheduler job (in seconds)
     #       Just be sure not to make things run too fast
     #       as there are API rate limitations
-    DISABLE_BALANCE_SUMMARY = True
-    DISABLE_COINBASE_FUTURES_PRODUCTS = True
-    DISABLE_TRADING_CONDITIONS = True
-    DISABLE_LIST_AND_STORE_FUTURE_ORDERS = True
+    ENABLE_BALANCE_SUMMARY = True
+    ENABLE_COINBASE_FUTURES_PRODUCTS = True
+    ENABLE_TRADING_CONDITIONS = True
+    ENABLE_LIST_AND_STORE_FUTURE_ORDERS = True
     # Time is measured in seconds (60 seconds = 1 min, etc)
     BALANCE_SUMMARY_TIME = 125
     COINBASE_FUTURES_PRODUCTS_TIME = 600
-    TRADING_CONDITIONS_TIME = 30  # This is the main job that opens and checks trading
-    FUTURE_ORDERS_TIME = 35
+    TRADING_CONDITIONS_TIME = 20  # This is the main job that opens and checks trading
+    FUTURE_ORDERS_TIME = 45  # Get the future orders and store in the DB
 
     # Trade conditions
     #   Define scoring thresholds based on normalizing the weighted timeframe
@@ -84,6 +88,13 @@ class Config:
     #   At what percentage do we want to place the take profit order?
     # TAKE_PROFIT_PERCENTAGE = 0.01  # Take Profit Order = 1%
     TAKE_PROFIT_PERCENTAGE = 0.005  # Take Profit Order = 0.5%
+
+    # NOTE: ONLY SET THIS TO MANUALLY OVERRIDE THE TAKE PROFIT PRICE
+    #   I'm still seeing issues with Coinbase's avg_entry_price from the positions API call
+    #   So sometime we may need to override the take profit price
+    #   DON'T LEAVE THIS ON AS THE NEXT TRADE WILL BE DIFFERENT
+    # TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = "62380"
+    TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = False  # Need to be a price as string
 
     # DCA ladder trade settings
     # These are the ladder orders to help protect us from a trade going

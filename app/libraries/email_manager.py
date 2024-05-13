@@ -5,11 +5,12 @@ import os
 class EmailManager:
 
     def __init__(self, app):
-        print(":Initializing EmailManager:")
-        self.app = app
+        # print(":Initializing EmailManager:")
         self.log = app.custom_log.log
-        self.mail = app.mail
         self.log(True, "D", None, ":Initializing TradeManager:")
+
+        self.app = app
+        self.mail = app.mail
 
     def send_email(self, subject='Test Email', body="Test Body"):
         self.log(True, "D", None, ":send_email:")

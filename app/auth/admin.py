@@ -5,8 +5,7 @@ from flask_admin.contrib.sqla.fields import QuerySelectField
 from flask_admin.form import Select2Widget
 from flask_login import current_user
 
-from app import app
-from app.db.db import db
+from app.models import db
 from app.models.admin import Role
 from app.models.futures import AccountBalanceSummary, FuturesOrder, FuturePosition, CoinbaseFuture
 from app.models.signals import AuroxSignal

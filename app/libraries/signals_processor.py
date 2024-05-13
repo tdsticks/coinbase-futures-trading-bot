@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
+from app.models import db, set_db_errors, joinedload
 import pytz
 
 # Models
@@ -8,20 +9,19 @@ from app.models.signals import AuroxSignal, FuturePriceAtSignal
 
 class SignalProcessor:
     def __init__(self, app):
-        self.app = app
         self.log = app.custom_log.log
+        self.log(True, "D", None, ":Initializing SignalProcessor:")
 
-        self.db = self.app.db
+        self.app = app
+        self.db_errors = set_db_errors
 
-        self.cb_adv_api = cbapi
-        # self.tm = trade_manager
+        self.cb_adv_api = self.app.cb_adv_api
 
         self.signals = {}
         self.signal_weights = {}
         self.load_signal_weights()
-        self.log(True, "D", None, ":Initializing SignalProcessor:")
 
-    def write_db_signal(self, data, trade_manager):
+    def write_db_signal(self, data):
         self.log(True, "I", None, ":write_db_signal:")
 
         # TODO: May need to convert these timestamps from Aurox as they're in ISO format
@@ -32,127 +32,145 @@ class SignalProcessor:
         # Also write a record using the signal spot price, futures bid and ask
         #   and store the relationship ids to both
         with self.app.app_context():  # Push an application context
+            # try:
+            # Convert timestamp to datetime object if necessary
+            # timestamp = data['timestamp']
+            timestamp = datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            timestamp = timestamp.replace(tzinfo=pytz.utc)
+            # self.log(True, "I", "timestamp", timestamp)
+
+            signal_spot_price = data['price'].replace(',', '')
+
+            # Define a unique key combination for updating or inserting signals
+            unique_key = {
+                'trading_pair': data['trading_pair'],
+                'time_unit': data['timeUnit']
+            }
+
+            # Attempt to find an existing signal with the same trading pair and time unit
+            existing_signal = AuroxSignal.query.filter_by(**unique_key).order_by(
+                AuroxSignal.timestamp.desc()).first()
+            self.log(True, "I", "    > Existing Signal", existing_signal)
+
+            new_signal = None
+
             try:
-                # Convert timestamp to datetime object if necessary
-                # timestamp = data['timestamp']
-                timestamp = datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
-                timestamp = timestamp.replace(tzinfo=pytz.utc)
-                # self.log(True, "I", "timestamp", timestamp)
+                # Check for existing signal to prevent duplicates
+                if existing_signal:
+                    # Update existing record
+                    existing_signal.timestamp = timestamp
+                    existing_signal.price = signal_spot_price
+                    existing_signal.signal = data['signal']
 
-                signal_spot_price = data['price'].replace(',', '')
+                    # self.app.db.session.add(existing_signal)
+                    db.session.add(existing_signal)
 
-                # Define a unique key combination for updating or inserting signals
-                unique_key = {
-                    'trading_pair': data['trading_pair'],
-                    'time_unit': data['timeUnit']
-                }
-
-                # Attempt to find an existing signal with the same trading pair and time unit
-                existing_signal = AuroxSignal.query.filter_by(**unique_key).order_by(
-                    AuroxSignal.timestamp.desc()).first()
-                self.log(True, "I", "    > Existing Signal", existing_signal)
-
-                new_signal = None
-
-                try:
-                    # Check for existing signal to prevent duplicates
-                    if existing_signal:
-                        # Update existing record
-                        existing_signal.timestamp = timestamp
-                        existing_signal.price = signal_spot_price
-                        existing_signal.signal = data['signal']
-                        db.session.add(existing_signal)
-                        self.log(True, "I", "    > Updated existing signal", existing_signal)
-                    else:
-                        # Create a new signal if none exists for the specific time unit and trading pair
-                        new_signal = AuroxSignal(
-                            timestamp=timestamp,
-                            price=signal_spot_price,
-                            signal=data['signal'],
-                            trading_pair=data['trading_pair'],
-                            time_unit=data['timeUnit']
-                        )
-                        db.session.add(new_signal)
-                        self.log(True, "I", "    > Stored new signal", new_signal)
-
-                    db.session.commit()  # Commit changes at the end of processing
-                    signal_stored = True
-
-                except db_errors as e:
-                    self.log(True, "E",
-                                 "    >>> Error with storing or retrieving AuroxSignal",
-                                 str(e))
-                    db.session.rollback()
-
-                next_months_product_id, next_month = trade_manager.check_for_contract_expires()
-
-                # Now, get the bid and ask prices for the current futures product
-                relevant_future_product = self.cb_adv_api.get_relevant_future_from_db(month_override=next_month)
-                self.log(True, "I", "relevant_future_product product_id",
-                             relevant_future_product.product_id)
-
-                # Get the current bid and ask prices for the futures product related to this signal
-                future_bid_price = 0
-                future_ask_price = 0
-                try:
-                    future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(
-                        relevant_future_product.product_id)
-                    if 'pricebooks' in future_bid_ask_price:
-                        future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
-                        future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
-                except AttributeError as e:
-                    self.log(True, "E",
-                                 "Unable to get Future Bid and Ask Prices",
-                                 "AttributeError:", e)
-                except ValueError as e:
-                    self.log(True, "E",
-                                 "Unable to get Future Bid and Ask Prices",
-                                 "ValueError:", e)
-
-                if next_months_product_id:
-                    self.log(True, "I",
-                                 "    > next_months_product_id", next_months_product_id)
-                    self.log(True, "I",
-                                 "    > next_month", next_month)
-
-                if new_signal:
-                    signal_id = new_signal.id
+                    self.log(True, "I", "    > Updated existing signal", existing_signal)
                 else:
-                    signal_id = existing_signal.id
-                self.log(True, "I", "    > Signal ID", signal_id)
+                    # Create a new signal if none exists for the specific time unit and trading pair
+                    new_signal = AuroxSignal(
+                        timestamp=timestamp,
+                        price=signal_spot_price,
+                        signal=data['signal'],
+                        trading_pair=data['trading_pair'],
+                        time_unit=data['timeUnit']
+                    )
 
-                try:
-                    # Find the related futures product based on the current futures product
-                    if relevant_future_product:
-                        existing_future_price_signal = FuturePriceAtSignal.query.filter_by(signal_id=signal_id).first()
-                        if existing_future_price_signal:
-                            # Correct the updating process by setting each field separately
-                            existing_future_price_signal.signal_spot_price = float(signal_spot_price)
-                            existing_future_price_signal.future_bid_price = future_bid_price
-                            existing_future_price_signal.future_ask_price = future_ask_price
-                            existing_future_price_signal.future_id = relevant_future_product.id
-                            self.log(True, "I", "Updated existing future price signal details")
-                        else:
-                            # If no existing record, create a new one
-                            new_future_price_signal = FuturePriceAtSignal(
-                                signal_id=signal_id,
-                                signal_spot_price=float(signal_spot_price),
-                                future_bid_price=future_bid_price,
-                                future_ask_price=future_ask_price,
-                                future_id=relevant_future_product.id
-                            )
-                            db.session.add(new_future_price_signal)
-                            self.log(True, "I", "Stored new future price signal")
-                        db.session.commit()
-                except db_errors as e:
-                    self.log(True, "E",
-                                 "    >>> Error with storing or retrieving FuturePriceAtSignal",
-                                 str(e))
-                    db.session.rollback()
-            except db_errors as e:
+                    # self.app.db.session.add(new_signal)
+                    db.session.add(new_signal)
+
+                    self.log(True, "I", "    > Stored new signal", new_signal)
+
+                # self.app.db.session.commit()  # Commit changes at the end of processing
+                db.session.commit()  # Commit changes at the end of processing
+
+                signal_stored = True
+
+            except self.db_errors as e:
                 self.log(True, "E",
-                             "    >>> Error with storing or retrieving the Aurox signal",
-                             str(e))
+                         "    >>> Error with storing or retrieving AuroxSignal",
+                         str(e))
+
+                # self.app.db.session.rollback()
+                db.session.rollback()
+
+            next_months_product_id, next_month = self.cb_adv_api.check_for_contract_expires()
+
+            # Now, get the bid and ask prices for the current futures product
+            relevant_future_product = self.cb_adv_api.get_relevant_future_from_db(month_override=next_month)
+            self.log(True, "I", "relevant_future_product product_id",
+                     relevant_future_product.product_id)
+
+            # Get the current bid and ask prices for the futures product related to this signal
+            future_bid_price = 0
+            future_ask_price = 0
+            try:
+                future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(
+                    relevant_future_product.product_id)
+                if 'pricebooks' in future_bid_ask_price:
+                    future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+                    future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+            except AttributeError as e:
+                self.log(True, "E",
+                         "Unable to get Future Bid and Ask Prices",
+                         "AttributeError:", e)
+            except ValueError as e:
+                self.log(True, "E",
+                         "Unable to get Future Bid and Ask Prices",
+                         "ValueError:", e)
+
+            if next_months_product_id:
+                self.log(True, "I",
+                         "    > next_months_product_id", next_months_product_id)
+                self.log(True, "I",
+                         "    > next_month", next_month)
+
+            if new_signal:
+                signal_id = new_signal.id
+            else:
+                signal_id = existing_signal.id
+            self.log(True, "I", "    > Signal ID", signal_id)
+
+            try:
+                # Find the related futures product based on the current futures product
+                if relevant_future_product:
+                    existing_future_price_signal = FuturePriceAtSignal.query.filter_by(signal_id=signal_id).first()
+                    if existing_future_price_signal:
+                        # Correct the updating process by setting each field separately
+                        existing_future_price_signal.signal_spot_price = float(signal_spot_price)
+                        existing_future_price_signal.future_bid_price = future_bid_price
+                        existing_future_price_signal.future_ask_price = future_ask_price
+                        existing_future_price_signal.future_id = relevant_future_product.id
+                        self.log(True, "I", "Updated existing future price signal details")
+                    else:
+                        # If no existing record, create a new one
+                        new_future_price_signal = FuturePriceAtSignal(
+                            signal_id=signal_id,
+                            signal_spot_price=float(signal_spot_price),
+                            future_bid_price=future_bid_price,
+                            future_ask_price=future_ask_price,
+                            future_id=relevant_future_product.id
+                        )
+
+                        # self.app.db.session.add(new_future_price_signal)
+                        db.session.add(new_future_price_signal)
+
+                        self.log(True, "I", "Stored new future price signal")
+
+                    # self.app.db.session.commit()
+                    db.session.commit()
+            except self.db_errors as e:
+                self.log(True, "E",
+                         "    >>> Error with storing or retrieving FuturePriceAtSignal",
+                         str(e))
+
+                # self.app.db.session.rollback()
+                db.session.rollback()
+
+            # except self.db_errors as e:
+            #     self.log(True, "E",
+            #              "    >>> Error with storing or retrieving the Aurox signal",
+            #              str(e))
 
         return signal_stored
 
@@ -426,7 +444,8 @@ class SignalProcessor:
     def fetch_signals(self):
         """Fetch latest signals for all time frames."""
         for key in self.signal_weights:
-            method_name = f'get_latest_{key}_signal'
+            key_lower = key.lower()
+            method_name = f'get_latest_{key_lower}_signal'
             if hasattr(self, method_name):
                 # print("method_name:", method_name)
                 self.signals[key] = getattr(self, method_name)()
@@ -448,24 +467,25 @@ class SignalProcessor:
                 direction_multiplier = 1 if signal.signal == 'long' else -1  # Determines the direction of the score
                 group_scores[group] += direction_multiplier * weight  # Apply direction to the weight
                 max_scores[group] += weight  # Accumulate maximum possible scores for normalization
+                # print("group:", group)
         return group_scores, max_scores
 
     @staticmethod
     def determine_group(time_frame):
         """Determine which group a time frame belongs to."""
-        if time_frame in ['weekly', 'five_day', 'three_day', 'two_day', 'daily', 'twelve_hr']:
+        if time_frame in ['WEEKLY', 'FIVE_DAY', 'THREE_DAY', 'TWO_DAY', 'DAILY', 'TWELVE_HR']:
             return 'group1'
-        elif time_frame in ['eight_hr', 'six_hr', 'four_hr', 'three_hr', 'two_hr', 'one_hour']:
+        elif time_frame in ['EIGHT_HR', 'SIX_HR', 'FOUR_HR', 'THREE_HR', 'TWO_HR', 'ONE_HOUR']:
             return 'group2'
-        elif time_frame in ['thirty_min', 'twenty_min', 'fifteen_min', 'ten_min', 'five_min']:
+        elif time_frame in ['THIRTY_MIN', 'TWENTY_MIN', 'FIFTEEN_MIN', 'TEN_MIN', 'FIVE_MIN']:
             return 'group3'
 
     # @staticmethod
     def decide_direction_strength(self, normalized_score):
 
-        strong = float(self.config['trade.conditions']['strong'])  # 0.5
-        moderate = float(self.config['trade.conditions']['moderate'])  # 0.2
-        neutral = float(self.config['trade.conditions']['neutral'])  # 0
+        strong = float(self.app.config['STRONG_SIGNAL_WEIGHT'])  # 0.5
+        moderate = float(self.app.config['MODERATE_SIGNAL_WEIGHT'])  # 0.2
+        neutral = float(self.app.config['NEUTRAL_SIGNAL_WEIGHT'])  # 0
 
         # Check for strong strength, where absolute value is needed to account
         #  for both positive and negative scores
@@ -542,9 +562,9 @@ class SignalProcessor:
 
             strength = self.decide_direction_strength(normalized_score)
             self.log(True, "I", f"{group.upper()}"
-                                    f" | Direction: {direction.upper()}"
-                                    f" | Strength: {strength.upper()}"
-                                    f" | Normalized Score: {normalized_score}")
+                                f" | Direction: {direction.upper()}"
+                                f" | Strength: {strength.upper()}"
+                                f" | Normalized Score: {normalized_score}")
             if group == 'group1':
                 group1['direction'] = direction
                 group1['strength'] = strength

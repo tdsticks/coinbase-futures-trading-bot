@@ -767,12 +767,10 @@ class CoinbaseAdvAPI:
     def get_dca_filled_orders_from_db(self, dca_side: str):
         # self.log(True, "I", None,
         #                         "get_dca_filled_orders_from_db")
+        dca_total_filled_price = 0
         dca_avg_filled_price = 0
-        dca_avg_filled_price_2 = 0
-        dca_count = 1  # This includes the MAIN initial order
-
+        dca_count = 0  # This includes the MAIN initial order
         dca_contract_size = 0
-
         quantity = self.app.config['LADDER_QUANTITY']
         # self.log(True, "I", "    quantity", quantity)
 
@@ -791,14 +789,19 @@ class CoinbaseAdvAPI:
                 # self.log(True, "I", "    dca_order.average_filled_price", dca_order.average_filled_price)
 
                 dca_contract_size += int(self.app.config['DCA_CONTRACTS'][i])
-                # print("dca_contract_size:", dca_contract_size)
+                # self.log(True, "I", "    dca_contract_size", dca_contract_size)
 
                 dca_count += 1
-                dca_avg_filled_price += round(int(dca_order.average_filled_price))
-                # dca_avg_filled_price_2 += round(int(dca_order.average_filled_price) * current_pos_contract_size)
+                dca_total_filled_price += round(int(dca_order.average_filled_price))
+        # self.log(True, "I", "    dca_total_filled_price", dca_total_filled_price)
+        # self.log(True, "I", "    dca_contract_size", dca_contract_size)
+        # self.log(True, "I", "    dca_count", dca_count)
 
-        # print("dca_avg_filled_price:", dca_avg_filled_price)
-        return dca_avg_filled_price, dca_contract_size, dca_count
+        if dca_count > 0:
+            dca_avg_filled_price = round(dca_total_filled_price / dca_count)
+        # self.log(True, "I", "    dca_avg_filled_price", dca_avg_filled_price)
+
+        return dca_avg_filled_price, dca_contract_size
 
     def cancel_order(self, order_ids: list):
         self.log(True, "D", "cancel_order")

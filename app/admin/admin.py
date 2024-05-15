@@ -1,5 +1,4 @@
 from flask import redirect, url_for, request
-from flask_admin import Admin, expose, AdminIndexView
 from flask_admin.contrib.sqla import ModelView
 from flask_admin.contrib.sqla.fields import QuerySelectField
 from flask_admin.form import Select2Widget
@@ -7,8 +6,6 @@ from flask_login import current_user
 
 from app.models import db
 from app.models.admin import Role
-from app.models.futures import AccountBalanceSummary, FuturesOrder, FuturePosition, CoinbaseFuture
-from app.models.signals import AuroxSignal
 
 
 class SecureModelView(ModelView):
@@ -20,14 +17,6 @@ class SecureModelView(ModelView):
         # print('SecureModelView.inaccessible')
         # Redirect to login page if user is not logged in
         return redirect(url_for('login', next=request.url))
-
-
-class MyAdminIndexView(AdminIndexView):
-    @expose('/')
-    def index(self):
-        if not current_user.is_authenticated and not current_user.is_superuser:
-            return redirect(url_for('login', next=request.url))
-        return super(MyAdminIndexView, self).index()
 
 
 class UserAdmin(SecureModelView):
@@ -115,20 +104,3 @@ class FuturesOrderAdmin(SecureModelView):
         'total_fees', 'total_value_after_fees', 'settled', 'edit_history', 'cancel_message', 'reject_message',
         'reject_reason', 'created_time', 'last_fill_time'
     )
-
-
-# Add Flask Admin
-admin = Admin(app, name='ATB Admin Panel',
-              index_view=MyAdminIndexView(),
-              template_mode='bootstrap4',
-              # base_template='admin/my_admin.html'
-              )
-
-# Register the models with Flask-Admin
-# admin.add_view(UserAdmin(User, db.session, name='Users'))
-# admin.add_view(RoleAdmin(Role, db.session, name='Roles'))
-admin.add_view(BalancesAdmin(AccountBalanceSummary, db.session))
-admin.add_view(CoinbaseFutureAdmin(CoinbaseFuture, db.session))
-admin.add_view(AuroxSignalAdmin(AuroxSignal, db.session))
-admin.add_view(FuturesPositionAdmin(FuturePosition, db.session))
-admin.add_view(FuturesOrderAdmin(FuturesOrder, db.session))

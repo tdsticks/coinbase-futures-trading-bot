@@ -17,11 +17,14 @@ class Config:
     MAIL_USE_SSL = False
     MAIL_DEBUG = False
 
+    # Email configurations
+    USE_EMAIL = True
+
     #
     # NOTE: Only change these if you know what you're doing!
     #
 
-    # Scheduler job settings
+    # Scheduler (task) job settings
     #   Adjust the timing of each APScheduler job (in seconds)
     #       Just be sure not to make things run too fast
     #       as there are API rate limitations
@@ -32,14 +35,17 @@ class Config:
     # Time is measured in seconds (60 seconds = 1 min, etc)
     BALANCE_SUMMARY_TIME = 125
     COINBASE_FUTURES_PRODUCTS_TIME = 600
-    TRADING_CONDITIONS_TIME = 20  # This is the main job that opens and checks trading
-    FUTURE_ORDERS_TIME = 45  # Get the future orders and store in the DB
+    TRADING_CONDITIONS_TIME = 30  # This is the main job that opens and checks trading
+    FUTURE_ORDERS_TIME = 35  # Get the future orders and store in the DB
 
     # Trade conditions
     #   Define scoring thresholds based on normalizing the weighted timeframe
     #       values (in hours) from all the Aurox signals we're collecting to
     #       evaluate high, mid-level and lower timeframes strength values
-    ENABLE_LIVE_TRADING = True  # Enable the live trading
+    ENABLE_LIVE_TRADING = False  # Enable the live trading
+
+    # Do we want to Dollar-Cost Average (DCA) ladder orders?
+    ENABLE_LADDER_CREATION = True
 
     # Signal weight as defined by hours and grouping
     # Group 1
@@ -74,14 +80,13 @@ class Config:
     #   last 15 minute signal price. It's 1 percent by default.
     # Adjust this if you may, the lower the percentage, the safer, but less likely
     #   the trade window will be open. Higher means we're getting further from the last
-    #   signal and could increase risk and decrease profit on the trade.
+    #   15 min signal and could increase risk and decrease profit on the trade.
     PERCENTAGE_DIFF_LIMIT = 1
 
     # First order settings
     #   Typically size should start as 1,
     #       increase if you want to start with larger trades
-    # CONTRACT_SIZE = 1
-    CONTRACT_SIZE = 2
+    CONTRACT_SIZE = 1
     LEVERAGE = 3
 
     # Take profit settings
@@ -119,9 +124,6 @@ class Config:
     #   This set the days left for the current future contract
     #       to have the bot switch to next months contract before it expires
     GRACE_DAYS = 3  # Increase for a large safety period
-
-    # Email configurations
-    USE_EMAIL = True
 
     # Logging configurations
     LOG_FILENAME = 'flask_app.log'

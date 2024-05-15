@@ -1,5 +1,4 @@
-import os
-from datetime import datetime, time
+from datetime import time
 import pytz
 from dotenv import load_dotenv
 
@@ -17,6 +16,7 @@ class TradeManager:
         self.log(True, "D", None, ":Initializing TradeManager:")
 
         self.app = app
+        self.email_mgr = app.email_manager
         self.cb_adv_api = app.cb_adv_api
         self.signal_processor = app.signal_processor
 
@@ -191,6 +191,9 @@ class TradeManager:
             position_side = future_positions['positions'][0]['side']
             # print("position_side:", position_side)
 
+            # Clear and store the active future position
+            self.cb_adv_api.store_future_positions(future_positions)
+
             side = ""
             if position_side == "LONG":
                 side = "BUY"
@@ -206,14 +209,14 @@ class TradeManager:
                 order_status="FILLED", side=side, bot_note="MAIN", get_all_orders=True)
             # self.log(True, "I", "Main Position Orders", main_position_orders)
 
-            # Clear and store the active future position
-            self.cb_adv_api.store_future_positions(future_positions)
-
-            main_position_order = main_position_orders[0]
-            # self.log(True, "I", "Main Position Order", main_position_order)
-
             amount_of_main_orders = len(main_position_orders)
-            # self.log(True, "I", "Amount of Main Orders", amount_of_main_orders)
+            self.log(True, "I", "Amount of MAIN Orders", amount_of_main_orders)
+
+            if amount_of_main_orders > 0:
+                main_position_order = main_position_orders[0]
+            else:
+                main_position_order = main_position_orders
+            # self.log(True, "I", "Main Position Order", main_position_order)
 
             base_size = 0
             avg_filled_price = 0
@@ -230,8 +233,8 @@ class TradeManager:
             # Set these to strings for later use
             avg_filled_price = str(int(avg_filled_price / amount_of_main_orders))
             base_size = str(base_size)
-            # self.log(True, "I", "Average filled Price Total", avg_filled_price)
-            # self.log(True, "I", "Amount of Base Size Total", base_size)
+            self.log(True, "I", "Average filled Price Total", avg_filled_price)
+            self.log(True, "I", "Amount of Base Size Total", base_size)
 
             # Now, reassign the main order the updated values for calculating later
             main_position_order.average_filled_price = avg_filled_price
@@ -333,7 +336,7 @@ class TradeManager:
                     self.log(True, "I", None, " >>> 15 Min Signal Direction", fifteen_min_trade_signal)
                     self.log(True, "I", None, " >>> Trade Signal Direction", trade_direction)
 
-                    # NOTE: Does the 15 Min match the overall signal trade direction of the Aurox signals?
+                    # NOTE: Does the 5 Min and 15 Min match the overall signal trade direction of the Aurox signals?
 
                     if five_min_trade_signal == trade_direction and fifteen_min_trade_signal == trade_direction:
                         self.log(True, "I", None,
@@ -367,8 +370,17 @@ class TradeManager:
                                  "   Fifteen Min Future Avg Price",
                                  fifteen_min_future_avg_price)
 
-                        # Just setting a high default number to check again
-                        percentage_diff = 10
+                        #
+                        # Next, we want to check the price differences between the last 15 min signal and
+                        #   the current price. We want to be sure we're with in a 1% range of opening our
+                        #   first order and be as close as possible to the entire trading strategy to
+                        #   maximize profits and minimize risk (loss of profits)
+                        #
+
+                        # Set a limit value is here (1 = 1%)
+                        # percentage_diff_limit = 1
+                        percentage_diff_limit = self.app.config['PERCENTAGE_DIFF_LIMIT']
+                        percentage_diff = 10  # Just setting a high default number to check against
 
                         # LONG = BUY
                         # SHORT = SELL
@@ -388,16 +400,13 @@ class TradeManager:
                             percentage_diff = round((check_signal_and_current_price_diff
                                                      / int(fifteen_min_future_avg_price)) * 100, 2)
 
-                        # NOTE: Make sure the price difference from the 15 Min signal and current price
-                        #   isn't too far off or beyond 1%, so we try to be safe and get more profit
-
-                        # Set a limit value is here (1 = 1%)
-                        # percentage_diff_limit = 1
-                        percentage_diff_limit = self.app.config['PERCENTAGE_DIFF_LIMIT']
                         per_diff_msg = (f"   >>> Checking! Signal Direction "
                                         f"{trade_direction} "
                                         f" Per Diff {percentage_diff}% < {percentage_diff_limit}% Limit")
                         self.log(True, "I", None, per_diff_msg)
+
+                        # NOTE: Make sure the price difference from the 15 Min signal and current price
+                        #   aren't too far off or beyond 1%, so we try to be safe and get more profit
 
                         if percentage_diff < percentage_diff_limit:
                             good_per_diff_msg = (f"   >>> Proceeding! current price diff of "
@@ -422,7 +431,7 @@ class TradeManager:
                                                                          leverage=leverage,
                                                                          order_type=order_type,
                                                                          bot_note="MAIN")
-                            print("MAIN order_created:", order_created)
+                            self.log(True, "I", "MAIN order_created", order_created)
 
                             if order_created:
                                 email_body = (f"New Order Placed!"
@@ -434,18 +443,6 @@ class TradeManager:
                                 self.email_mgr.send_email(subject="New Order Placed!",
                                                           body=email_body)
 
-                            # TODO: Need to see if the MAIN order is filled first before placing ladder orders
-
-                            # How many ladder orders? (10 max)
-                            # ladder_order_qty = 8
-                            ladder_order_qty = self.app.config['LADDER_QUANTITY']
-
-                            # Create the DCA ladder orders
-                            self.ladder_orders(quantity=ladder_order_qty,
-                                               side=trade_side,
-                                               product_id=product_id,
-                                               bid_price=bid_price,
-                                               ask_price=ask_price)
                         else:
                             bad_per_diff_msg = (f"   >>> Holding off, current price diff of "
                                                 f"{check_signal_and_current_price_diff} "
@@ -481,34 +478,49 @@ class TradeManager:
     def calc_avg_filled_price(self, order, dca_side):
         self.log(True, "D", None, ":Calc Avg Filled Price:")
 
-        (dca_avg_filled_price, dca_contract_size,
-         dca_count) = self.cb_adv_api.get_dca_filled_orders_from_db(
+        dca_avg_filled_price, dca_contract_size = self.cb_adv_api.get_dca_filled_orders_from_db(
             dca_side=dca_side)
         # self.log(True, "I", "    DCA Avg Filled Price", dca_avg_filled_price)
-        # self.log(True, "I", "    DCA Contract Size", dca_contract_size)
-        # self.log(True, "I", "    DCA Count", dca_count)
 
+        # This MAIN order average filled price is recalculated above if there are multiple MAIN
+        #   orders placed by accident
         main_order_avg_filled_price = int(order.average_filled_price)
         main_order_base_size = int(order.base_size)
         # self.log(True, "I", "    MAIN Order Avg Filled Price", main_order_avg_filled_price)
         # self.log(True, "I", "    MAIN Order Base Size", main_order_base_size)
 
         main_and_dca_base_size = main_order_base_size + dca_contract_size
+        # self.log(True, "I", "    TOTAL - MAIN and DCA Base Size", main_and_dca_base_size)
 
         # Take the averaged main order filled price (if there are more than one) and
         #   multiple it be the total contracts (base_size), then add all of the dca DCA)
         #   orders, plus all of their contracts and divided by the total number of contracts (base_size)
         avg_filled_price = round(((main_order_avg_filled_price * main_order_base_size) +
-                                  (dca_avg_filled_price * dca_contract_size)) / main_and_dca_base_size)
-        self.log(True, "I", "    ALL ORDERS Avg Filled Price", avg_filled_price)
+                                  dca_avg_filled_price * dca_contract_size) / main_and_dca_base_size)
+        # self.log(True, "I", "    TOTAL - ORDERS Avg Filled Price", avg_filled_price)
 
         return avg_filled_price
 
-    def place_trade_and_ladder(self):
+    def create_ladder_trades(self, trade_side, product_id):
         self.log(True, "D", None, "--------------------------")
-        self.log(True, "D", None, ":place_trade_and_ladder:")
+        self.log(True, "D", None, ":create_ladder_trades:")
 
-        # TODO: Move code from check_trading_conditions and place here
+        if self.app.config['ENABLE_LADDER_CREATION']:
+            bid_price, ask_price, avg_price = (
+                self.cb_adv_api.get_current_average_price(product_id=product_id))
+            self.log(True, "I",
+                     "   bid ask avg_price", avg_price)
+
+            # How many ladder orders? (10 max)
+            # ladder_order_qty = 8
+            ladder_order_qty = self.app.config['LADDER_QUANTITY']
+
+            # Create the DCA ladder orders
+            self.ladder_orders(quantity=ladder_order_qty,
+                               side=trade_side,
+                               product_id=product_id,
+                               bid_price=bid_price,
+                               ask_price=ask_price)
 
     def tracking_current_position_profit_loss(self, position, order, next_month):
         self.log(True, "D", None, "---------------------------------------")
@@ -585,12 +597,12 @@ class TradeManager:
             self.log(True, "I", "Avg Entry Price $", avg_filled_price)
             self.log(True, "I", "Current Price $", current_price)
             self.log(True, "I", "# of Contracts", number_of_contracts)
-            if calc_percentage >= 2:
-                self.log(True, "I", "Take profit at 2% or higher %", calc_percentage)
+            if calc_percentage >= 1:
+                self.log(True, "I", "Take profit at 1% or higher %", calc_percentage)
                 self.log(True, "I", "Good Profit $", calc_profit_or_loss)
-            elif 2 > calc_percentage > 0.5:
-                self.log(True, "I", "Not ready to take profit %", calc_percentage)
-                self.log(True, "I", "Ok Profit $", calc_profit_or_loss)
+            elif 2 > calc_percentage >= 0.5:
+                self.log(True, "I", "Ready to take profit %", calc_percentage)
+                self.log(True, "I", "Profit $", calc_profit_or_loss)
             elif 0.5 >= calc_percentage >= 0:
                 self.log(True, "I", "Neutral %", calc_percentage)
                 self.log(True, "I", "Not enough profit $", calc_profit_or_loss)
@@ -732,6 +744,9 @@ class TradeManager:
                 self.log(True, "I", None,
                          "   >>> TAKE_PROFIT order_created!")
                 self.log(True, "I", "    >>> Order:", order_created)
+
+                # Also, create the DCA ladder orders
+                self.create_ladder_trades(trade_side=side, product_id=product_id)
 
             else:  # Otherwise, let's edit and update the order based on the market and position(s)
                 self.log(True, "I", None,

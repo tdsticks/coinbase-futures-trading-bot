@@ -12,6 +12,7 @@ mail = Mail()
 
 from .main import main as main_blueprint
 from .auth import auth as auth_blueprint
+from .admin import setup_admin
 from .models import db
 
 # Custom Libraries
@@ -50,6 +51,7 @@ def create_app(config_class=Config):
     # Register blueprints
     app.register_blueprint(main_blueprint)
     app.register_blueprint(auth_blueprint)
+    setup_admin(app)
 
     # logger.info("create_app Complete")
     app.custom_log.log(True, "I", None,

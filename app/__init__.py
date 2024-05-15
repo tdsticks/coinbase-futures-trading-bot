@@ -80,8 +80,12 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_blueprint)
     setup_admin(app)
 
-    websocket_thread = threading.Thread(target=app.trailing_take_profit.run_websocket)
-    websocket_thread.start()
+    # TODO: Need to only enable once we have a trade open
+
+    # Run the Coinbase Websocket for trailing take profit
+    # This will start the WebSocket client in a separate thread
+    # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_cb_wsclient)
+    # websocket_thread.start()
 
     # logger.info("create_app Complete")
     app.custom_log.log(True, "I", None,

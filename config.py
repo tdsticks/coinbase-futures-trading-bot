@@ -2,13 +2,20 @@ import os
 
 
 class Config:
+    # DB Settings
     SECRET_KEY = os.getenv('SECRET_KEY')
     SQLALCHEMY_DATABASE_URI = os.getenv('SQLALCHEMY_DATABASE_URI')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Flask DEBUG Mode
     DEBUG = os.getenv('DEBUG', False)
+
+    # Coinbase API KEY and SECRET
     API_KEY = os.getenv('API_KEY')
     API_SECRET = os.getenv('API_SECRET')
     # UUID = os.getenv('UUID')
+
+    # EMAIL Settings
     MAIL_SERVER = 'smtp.gmail.com'
     MAIL_PORT = 587
     MAIL_USERNAME = os.getenv('MAIL_USERNAME')
@@ -16,9 +23,7 @@ class Config:
     MAIL_USE_TLS = True
     MAIL_USE_SSL = False
     MAIL_DEBUG = False
-
-    # Email configurations
-    USE_EMAIL = True
+    USE_EMAIL = True  # Email Enabled
 
     #
     # NOTE: Only change these if you know what you're doing!
@@ -32,20 +37,60 @@ class Config:
     ENABLE_COINBASE_FUTURES_PRODUCTS = True
     ENABLE_TRADING_CONDITIONS = True
     ENABLE_LIST_AND_STORE_FUTURE_ORDERS = True
-    # Time is measured in seconds (60 seconds = 1 min, etc)
+
+    # Schedule Timers
+    #   Time is measured in seconds (60 seconds = 1 min, etc)
     BALANCE_SUMMARY_TIME = 125
     COINBASE_FUTURES_PRODUCTS_TIME = 600
     TRADING_CONDITIONS_TIME = 30  # This is the main job that opens and checks trading
     FUTURE_ORDERS_TIME = 35  # Get the future orders and store in the DB
 
+    ###############################
+    # Trading and order creation controls
+    ###############################
+    ENABLE_ORDER_CREATION = True  # Enable order creation (all/any orders)
+    ENABLE_MAIN_ORDER_CREATION = True  # Enable the main (first) order
+    ENABLE_TAKE_PROFIT_CREATION = True  # Enable take profit order creation
+    # ENABLE_TRAILING_TAKE_PROFIT = True  # Enable trailing take profit feature
+
+    # Do we want to Dollar-Cost Average (DCA) ladder orders?
+    ENABLE_LADDER_CREATION = False
+
+    # This is the difference percentage in price from the current average price to the
+    #   last 15 minute signal price. It's 1 percent by default.
+    # Adjust this if you may, the lower the percentage, the safer, but less likely
+    #   the trade window will be open. Higher means we're getting further from the last
+    #   15 min signal and could increase risk and decrease profit on the trade.
+    PERCENTAGE_DIFF_LIMIT = 1
+
+    # First (MAIN) order settings
+    #   Typically size should start as 1,
+    #       increase if you want to start with larger trades
+    CONTRACT_SIZE = 1
+    LEVERAGE = 3
+
+    # Take profit settings
+    #   At what percentage do we want to place the take profit order?
+    # TAKE_PROFIT_PERCENTAGE = 0.01  # Take Profit Order = 1%
+    TAKE_PROFIT_PERCENTAGE = 0.005  # Take Profit Order = 0.5%
+
+    INITIAL_TAKE_PROFIT = 0.005  # 0.5%
+    TRAILING_THRESHOLD = 0.005  # Start trailing after reaching 0.5%
+    TRAILING_OFFSET = 0.002  # 0.2% below the highest price
+
+    # NOTE: ONLY SET THIS TO MANUALLY OVERRIDE THE TAKE PROFIT PRICE
+    #   I'm still seeing issues with Coinbase's avg_entry_price from the positions
+    #   API data, so sometime we may need to override the take profit price
+    #   DON'T LEAVE THIS ON AS THE NEXT TRADE WILL BE DIFFERENT
+    # TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = "62380"
+    TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = False  # Needs to be a price as string
+
+    ###############################
     # Trade conditions
     #   Define scoring thresholds based on normalizing the weighted timeframe
     #       values (in hours) from all the Aurox signals we're collecting to
     #       evaluate high, mid-level and lower timeframes strength values
-    ENABLE_LIVE_TRADING = True  # Enable the live trading
-
-    # Do we want to Dollar-Cost Average (DCA) ladder orders?
-    ENABLE_LADDER_CREATION = True
+    ###############################
 
     # Signal weight as defined by hours and grouping
     # Group 1
@@ -75,35 +120,6 @@ class Config:
     STRONG_SIGNAL_WEIGHT = 0.5
     MODERATE_SIGNAL_WEIGHT = 0.2
     NEUTRAL_SIGNAL_WEIGHT = 0
-
-    # This is the difference percentage in price from the current average price to the
-    #   last 15 minute signal price. It's 1 percent by default.
-    # Adjust this if you may, the lower the percentage, the safer, but less likely
-    #   the trade window will be open. Higher means we're getting further from the last
-    #   15 min signal and could increase risk and decrease profit on the trade.
-    PERCENTAGE_DIFF_LIMIT = 1
-
-    # First order settings
-    #   Typically size should start as 1,
-    #       increase if you want to start with larger trades
-    CONTRACT_SIZE = 1
-    LEVERAGE = 3
-
-    # Take profit settings
-    #   At what percentage do we want to place the take profit order?
-    # TAKE_PROFIT_PERCENTAGE = 0.01  # Take Profit Order = 1%
-    TAKE_PROFIT_PERCENTAGE = 0.005  # Take Profit Order = 0.5%
-
-    INITIAL_TAKE_PROFIT = 0.005  # 0.5%
-    TRAILING_THRESHOLD = 0.005  # Start trailing after reaching 0.5%
-    TRAILING_OFFSET = 0.002  # 0.2% below the highest price
-
-    # NOTE: ONLY SET THIS TO MANUALLY OVERRIDE THE TAKE PROFIT PRICE
-    #   I'm still seeing issues with Coinbase's avg_entry_price from the positions
-    #   API data, so sometime we may need to override the take profit price
-    #   DON'T LEAVE THIS ON AS THE NEXT TRADE WILL BE DIFFERENT
-    # TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = "62380"
-    TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = False  # Needs to be a price as string
 
     # DCA ladder trade settings
     # These are the ladder orders to help protect us from a trade going

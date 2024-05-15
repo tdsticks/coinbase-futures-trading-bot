@@ -19,6 +19,7 @@ class TradeManager:
         self.email_mgr = app.email_manager
         self.cb_adv_api = app.cb_adv_api
         self.signal_processor = app.signal_processor
+        self.avg_filled_price = None
 
     def ladder_orders(self, side: str, product_id: str, bid_price, ask_price,
                       quantity: int = 5, manual_price: str = ''):
@@ -176,17 +177,21 @@ class TradeManager:
         # print("Future Positions:")
         # pp(future_positions)
 
+        # Get our 5 min and 15 min signals for matching against later
         five_min_signals = self.signal_processor.get_latest_five_min_signal()
         fifteen_min_signals = self.signal_processor.get_latest_fifteen_min_signal()
 
+        # Get our signal data (trading condition, direction and signal groups)
         trading_permitted, trade_direction, groups = self.signal_processor.run()
-        self.log(True, "W", " >>> Live Trading Enabled", self.app.config['ENABLE_LIVE_TRADING'])
         self.log(True, "I", " >>> Trade Permitted", trading_permitted)
         self.log(True, "I", " >>> Trade Direction", trade_direction)
 
+        enable_main_order_creation = self.app.config['ENABLE_MAIN_ORDER_CREATION']
+        self.log(True, "I", " >>> MAIN Order Creation Enabled", enable_main_order_creation)
+
         # Make sure we have a future position
         if len(future_positions['positions']) > 0:
-            self.log(True, "I", None, "  >>> We have an ACTIVE position(s) <<<")
+            self.log(True, "I", None, "  >>> ACTIVE TRADING POSITION FOUND <<<")
 
             position_side = future_positions['positions'][0]['side']
             # print("position_side:", position_side)
@@ -200,11 +205,7 @@ class TradeManager:
             elif position_side == "SHORT":
                 side = "SELL"
 
-            # Now, get the Future Order(s) from the DB so we have more accurate data
-            # main_position_order = self.cb_adv_api.get_current_take_profit_order_from_db(
-            #     order_status="FILLED", side=side, bot_note="MAIN", get_all_orders=False)
-            # self.log(True, "I", "Cur Position Order", main_position_order)
-
+            # Now, get the MAIN Order(s) from the DB so we have more accurate data
             main_position_orders = self.cb_adv_api.get_current_take_profit_order_from_db(
                 order_status="FILLED", side=side, bot_note="MAIN", get_all_orders=True)
             # self.log(True, "I", "Main Position Orders", main_position_orders)
@@ -212,7 +213,9 @@ class TradeManager:
             amount_of_main_orders = len(main_position_orders)
             self.log(True, "I", "Amount of MAIN Orders", amount_of_main_orders)
 
+            # Check to see if we have multiple main orders
             if amount_of_main_orders > 0:
+                # Assign the first order of the array to be the main order to work with
                 main_position_order = main_position_orders[0]
             else:
                 main_position_order = main_position_orders
@@ -221,7 +224,7 @@ class TradeManager:
             base_size = 0
             avg_filled_price = 0
 
-            # If we have multiple main orders by accident, let's consolidate to one
+            # If we have multiple main orders by accident, let's consolidate values
             #   for calculating later
             for pos_order in main_position_orders:
                 # Make sure the order was settled before adding
@@ -230,7 +233,8 @@ class TradeManager:
                     base_size += int(pos_order.filled_size)
                     avg_filled_price += int(pos_order.average_filled_price)
 
-            # Set these to strings for later use
+            # Average out all the MAIN order filled price and base size
+            #   Set these to strings for later use
             avg_filled_price = str(int(avg_filled_price / amount_of_main_orders))
             base_size = str(base_size)
             self.log(True, "I", "Average filled Price Total", avg_filled_price)
@@ -251,6 +255,8 @@ class TradeManager:
                         positions = FuturePosition.query.all()
                         # self.log(True, "I", "positions", positions)
                         for position in positions:
+                            # If we have both a MAIN order and active position
+                            #   then run the profit loss and take profit methods
                             self.tracking_current_position_profit_loss(position, main_position_order, next_month)
                             self.track_take_profit_order(position, main_position_order)
 
@@ -259,7 +265,6 @@ class TradeManager:
             else:
                 self.log(True, "W",
                          "    >>> NO Main Position Order Found", main_position_order)
-
         else:
             self.log(True, "I", None, " >>> No Open Position")
             if trading_permitted:
@@ -423,25 +428,28 @@ class TradeManager:
                                          f"Limit Price:{limit_price} Size:{size} Leverage:{leverage}")
                             self.log(True, "I", None, order_msg)
 
-                            # Create a new MAIN order
-                            order_created = self.cb_adv_api.create_order(side=trade_side,
-                                                                         product_id=product_id,
-                                                                         size=size,
-                                                                         limit_price=limit_price,
-                                                                         leverage=leverage,
-                                                                         order_type=order_type,
-                                                                         bot_note="MAIN")
-                            self.log(True, "I", "MAIN order_created", order_created)
+                            if enable_main_order_creation:
+                                # Create a new MAIN order
+                                order_created = self.cb_adv_api.create_order(side=trade_side,
+                                                                             product_id=product_id,
+                                                                             size=size,
+                                                                             limit_price=limit_price,
+                                                                             leverage=leverage,
+                                                                             order_type=order_type,
+                                                                             bot_note="MAIN")
+                                self.log(True, "I", "MAIN order_created", order_created)
 
-                            if order_created:
-                                email_body = (f"New Order Placed!"
-                                              f"\nTrade side:{trade_side}"
-                                              f"\nOrder type:{order_type} "
-                                              f"\nLimit Price:{limit_price}"
-                                              f"\nSize:{size}"
-                                              f"\nLeverage:{leverage}")
-                                self.email_mgr.send_email(subject="New Order Placed!",
-                                                          body=email_body)
+                                if order_created:
+                                    email_body = (f"New Order Placed!"
+                                                  f"\nTrade side:{trade_side}"
+                                                  f"\nOrder type:{order_type} "
+                                                  f"\nLimit Price:{limit_price}"
+                                                  f"\nSize:{size}"
+                                                  f"\nLeverage:{leverage}")
+                                    self.email_mgr.send_email(subject="New Order Placed!",
+                                                              body=email_body)
+                            else:
+                                self.log(True, "W", " >>> MAIN Order Creation Disabled", enable_main_order_creation)
 
                         else:
                             bad_per_diff_msg = (f"   >>> Holding off, current price diff of "
@@ -516,11 +524,11 @@ class TradeManager:
             ladder_order_qty = self.app.config['LADDER_QUANTITY']
 
             # Create the DCA ladder orders
-            # self.ladder_orders(quantity=ladder_order_qty,
-            #                    side=trade_side,
-            #                    product_id=product_id,
-            #                    bid_price=bid_price,
-            #                    ask_price=ask_price)
+            self.ladder_orders(quantity=ladder_order_qty,
+                               side=trade_side,
+                               product_id=product_id,
+                               bid_price=bid_price,
+                               ask_price=ask_price)
 
     def tracking_current_position_profit_loss(self, position, order, next_month):
         self.log(True, "D", None, "---------------------------------------")
@@ -558,6 +566,10 @@ class TradeManager:
 
             # Find all the FILLED DCA orders to get the average price + the MAIN order
             avg_filled_price = self.calc_avg_filled_price(order=order, dca_side=dca_side)
+
+            # Assign for the Trailing Take Profit Class
+            self.avg_filled_price = float(avg_filled_price)
+            self.log(True, "W", "    avg_filled_price", self.avg_filled_price)
 
             # Get the current price from the Future Position
             current_price = round(int(position.current_price), 2)
@@ -640,6 +652,9 @@ class TradeManager:
             take_profit_price = ""
             order_type = "limit_limit_gtc"
 
+            enable_take_profit = self.app.config['ENABLE_TAKE_PROFIT_CREATION']
+            self.log(True, "I", "   Enable Take Profit Order", enable_take_profit)
+
             # take_profit_percentage = 0.01
             take_profit_percentage = self.app.config['TAKE_PROFIT_PERCENTAGE']
             tp_per_msg = f" Take Profit Percentage: {take_profit_percentage * 100}%"
@@ -710,6 +725,10 @@ class TradeManager:
             # Find all the FILLED DCA orders to get the average price + the MAIN order
             avg_filled_price = self.calc_avg_filled_price(order=order, dca_side=dca_side)
 
+            # Assign for the Trailing Take Profit Class
+            self.avg_filled_price = float(avg_filled_price)
+            self.log(True, "W", "    avg_filled_price", self.avg_filled_price)
+
             # Calculate the take profit price (Long or Short)
             take_profit_offset_price = int(float(avg_filled_price) * take_profit_percentage)
             # self.log(True, "I", "     Take Profit Offset Price", take_profit_offset_price)
@@ -733,17 +752,20 @@ class TradeManager:
                 self.log(True, "I", None,
                          "  >>> Create new take_profit_order")
 
-                # Take Profit Order
-                order_created = self.cb_adv_api.create_order(side=take_profit_side,
-                                                             product_id=product_id,
-                                                             size=number_of_contracts,
-                                                             limit_price=take_profit_price,
-                                                             leverage='',
-                                                             order_type=order_type,
-                                                             bot_note="TAKE_PROFIT")
-                self.log(True, "I", None,
-                         "   >>> TAKE_PROFIT order_created!")
-                self.log(True, "I", "    >>> Order:", order_created)
+                if enable_take_profit:
+                    # Take Profit Order
+                    order_created = self.cb_adv_api.create_order(side=take_profit_side,
+                                                                 product_id=product_id,
+                                                                 size=number_of_contracts,
+                                                                 limit_price=take_profit_price,
+                                                                 leverage='',
+                                                                 order_type=order_type,
+                                                                 bot_note="TAKE_PROFIT")
+                    self.log(True, "I", None,
+                             "   >>> TAKE_PROFIT order_created!")
+                    self.log(True, "I", "    >>> Order:", order_created)
+                else:
+                    self.log(True, "W", "    Take Profit Order Disabled", enable_take_profit)
 
                 # TODO: Need to add way to check for existing ladder orders
                 #   before allowing them to be created

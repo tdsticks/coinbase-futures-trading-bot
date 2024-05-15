@@ -544,11 +544,11 @@ class CoinbaseAdvAPI:
         # Ceiling price for which the order should get filled.
 
         order_created = {}
-        enable_live_trading = self.app.config['ENABLE_LIVE_TRADING']
+        enable_order_creation = self.app.config['ENABLE_ORDER_CREATION']
 
         # Live trading enabled
-        if enable_live_trading:
-            self.log(True, "W", "Live Trading Enabled", enable_live_trading)
+        if enable_order_creation:
+            self.log(True, "W", "Enable Order Creation", enable_order_creation)
 
             # NOTE: A unique UUID that we make (should store and not repeat, must be in UUID format
             # Generate and print a UUID4
@@ -696,7 +696,7 @@ class CoinbaseAdvAPI:
             self.store_order(post_order_for_storing)
             # print("Order Created and Store in the DB")
         else:
-            self.log(True, "W", "Live Trading Disabled")
+            self.log(True, "W", "   >>> Order Creation Disabled")
 
         return order_created
 

@@ -516,11 +516,11 @@ class TradeManager:
             ladder_order_qty = self.app.config['LADDER_QUANTITY']
 
             # Create the DCA ladder orders
-            self.ladder_orders(quantity=ladder_order_qty,
-                               side=trade_side,
-                               product_id=product_id,
-                               bid_price=bid_price,
-                               ask_price=ask_price)
+            # self.ladder_orders(quantity=ladder_order_qty,
+            #                    side=trade_side,
+            #                    product_id=product_id,
+            #                    bid_price=bid_price,
+            #                    ask_price=ask_price)
 
     def tracking_current_position_profit_loss(self, position, order, next_month):
         self.log(True, "D", None, "---------------------------------------")
@@ -745,8 +745,11 @@ class TradeManager:
                          "   >>> TAKE_PROFIT order_created!")
                 self.log(True, "I", "    >>> Order:", order_created)
 
+                # TODO: Need to add way to check for existing ladder orders
+                #   before allowing them to be created
+
                 # Also, create the DCA ladder orders
-                self.create_ladder_trades(trade_side=side, product_id=product_id)
+                # self.create_ladder_trades(trade_side=side, product_id=product_id)
 
             else:  # Otherwise, let's edit and update the order based on the market and position(s)
                 self.log(True, "I", None,

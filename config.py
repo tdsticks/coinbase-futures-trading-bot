@@ -42,7 +42,7 @@ class Config:
     #   Define scoring thresholds based on normalizing the weighted timeframe
     #       values (in hours) from all the Aurox signals we're collecting to
     #       evaluate high, mid-level and lower timeframes strength values
-    ENABLE_LIVE_TRADING = False  # Enable the live trading
+    ENABLE_LIVE_TRADING = True  # Enable the live trading
 
     # Do we want to Dollar-Cost Average (DCA) ladder orders?
     ENABLE_LADDER_CREATION = True
@@ -94,12 +94,16 @@ class Config:
     # TAKE_PROFIT_PERCENTAGE = 0.01  # Take Profit Order = 1%
     TAKE_PROFIT_PERCENTAGE = 0.005  # Take Profit Order = 0.5%
 
+    INITIAL_TAKE_PROFIT = 0.005  # 0.5%
+    TRAILING_THRESHOLD = 0.005  # Start trailing after reaching 0.5%
+    TRAILING_OFFSET = 0.002  # 0.2% below the highest price
+
     # NOTE: ONLY SET THIS TO MANUALLY OVERRIDE THE TAKE PROFIT PRICE
-    #   I'm still seeing issues with Coinbase's avg_entry_price from the positions API call
-    #   So sometime we may need to override the take profit price
+    #   I'm still seeing issues with Coinbase's avg_entry_price from the positions
+    #   API data, so sometime we may need to override the take profit price
     #   DON'T LEAVE THIS ON AS THE NEXT TRADE WILL BE DIFFERENT
     # TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = "62380"
-    TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = False  # Need to be a price as string
+    TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = False  # Needs to be a price as string
 
     # DCA ladder trade settings
     # These are the ladder orders to help protect us from a trade going

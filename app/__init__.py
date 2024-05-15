@@ -3,6 +3,7 @@ from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_bcrypt import Bcrypt
 from flask_mail import Mail
+import threading
 
 from config import Config
 
@@ -21,7 +22,32 @@ from app.libraries.email_manager import EmailManager
 from app.libraries.coinbase_api import CoinbaseAdvAPI
 from app.libraries.signals_processor import SignalProcessor
 from app.libraries.trade_manager import TradeManager
+from app.libraries.trailing_take_profit import TrailingTakeProfit
 from app.scheduler.tasks import setup_scheduler
+
+# TODO: What happens if the Aurox site goes down or has interruptions and we don't receive signals?
+#   How do we catch up to the latest signals that came in already? Email?
+#   Should create a separate process / app just for signals to to write to the same database
+# TODO: Since the market closes on holidays and 5PM on Friday's should we limit trading on those days?
+# TODO: Notification Alerts
+# TODO: Need a way to manually trigger bot to open trade when I want
+# TODO: Need to build a UI (web interface using Vue or Vite or Streamlite)
+#   Dashboard
+#       Open Trades / Positions
+#       Funds
+#       Risk / Liquidation %
+#       Signal Status
+#   Trading view
+#       Open Trades / Positions
+#       Manual Trade (add Laddering DCA)
+#       Chart with current orders (Avg Entry, Take Profit, DCA orders)
+#   Bot Settings
+# TODO: Do we also create a trailing take profit feature?
+# TODO: Do we need the websocket to watch prices? or to trade Orders faster?
+# TODO: Should we start storing Aurox signals historically again?
+#   Maybe we could formulate better signals direction or calculation from this
+# TODO: Look into adding a timestamp calculation to our calc_all_signals_score_for_direction
+#   Could use current and 1 previous Aurox alert to help calculate price difference, plus length of time
 
 
 def create_app(config_class=Config):
@@ -42,6 +68,7 @@ def create_app(config_class=Config):
     app.cb_adv_api = CoinbaseAdvAPI(app)
     app.signal_processor = SignalProcessor(app)
     app.trade_manager = TradeManager(app)
+    app.trailing_take_profit = TrailingTakeProfit(app)
     setup_scheduler(app)
 
     # Create all the models (tables) in the db
@@ -52,6 +79,9 @@ def create_app(config_class=Config):
     app.register_blueprint(main_blueprint)
     app.register_blueprint(auth_blueprint)
     setup_admin(app)
+
+    websocket_thread = threading.Thread(target=app.trailing_take_profit.run_websocket)
+    websocket_thread.start()
 
     # logger.info("create_app Complete")
     app.custom_log.log(True, "I", None,

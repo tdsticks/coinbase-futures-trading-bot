@@ -30,6 +30,7 @@ from app.scheduler.tasks import setup_scheduler
 #   Should create a separate process / app just for signals to to write to the same database
 # TODO: Since the market closes on holidays and 5PM on Friday's should we limit trading on those days?
 # TODO: Notification Alerts
+# TODO: Investigate CCXT integration
 # TODO: Need a way to manually trigger bot to open trade when I want
 # TODO: Need to build a UI (web interface using Vue or Vite or Streamlite)
 #   Dashboard
@@ -85,6 +86,8 @@ def create_app(config_class=Config):
     # Run the Coinbase Websocket for trailing take profit
     # This will start the WebSocket client in a separate thread
     # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_cb_wsclient)
+    # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_trailing_take_profit)
+    # websocket_thread.daemon = True  # Daemonize thread to terminate with the main app
     # websocket_thread.start()
 
     # logger.info("create_app Complete")

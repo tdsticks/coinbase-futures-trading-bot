@@ -533,11 +533,13 @@ class SignalProcessor:
                    f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
             trading_permitted = True
 
+        # REVIEW: Disabling this for now as we may not want to factor in the higher timeframes with
+        #  opening futures trades
         # Now, check the High TF and Lower TF direction second and a STRONG lower TF strength
-        elif group3['direction'] == group1['direction'] and group3['strength'] == 'STRONG':
-            msg = (f"Higher and Lower are same direction with lower strength of: {group3['strength']}"
-                   f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
-            trading_permitted = True
+        # elif group3['direction'] == group1['direction'] and group3['strength'] == 'STRONG':
+        #     msg = (f"Higher and Lower are same direction with lower strength of: {group3['strength']}"
+        #            f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
+        #     trading_permitted = True
 
         self.log(True, "I", "Trading Message", msg)
         return trading_permitted

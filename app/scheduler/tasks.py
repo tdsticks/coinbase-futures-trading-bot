@@ -91,7 +91,7 @@ def setup_scheduler(app):
             product_id_msg = f"Product: {product_id}"
             app.custom_log.log(True, "D", month_msg, product_id_msg)
             for status in statuses:
-                # Need to delay the API call due to running to many at a time
+                # Need to delay the API call due to running too many at a time
                 time.sleep(1)
                 orders = app.cb_adv_api.list_orders(product_id=product_id, order_status=status)
                 status_msg = f" {status}"
@@ -116,7 +116,7 @@ def setup_scheduler(app):
                 next_product_id = next_months_future_product.product_id
 
                 run_all_list_orders(all_order_status, curr_month, curr_product_id)
-                run_all_list_orders(all_order_status, next_month, next_product_id)
+                # run_all_list_orders(all_order_status, next_month, next_product_id)
 
                 # List Orders
                 # ORDER TYPES:
@@ -128,54 +128,25 @@ def setup_scheduler(app):
                 # if len(all_orders['orders']) > 0:
                 #     app.cb_adv_api.store_or_update_orders_from_api(all_orders)
 
-    # @scheduler.task('interval', id='do_job_6', seconds=1500000, misfire_grace_time=900)
+    # @scheduler.task('interval', id='do_job_6', seconds=15, misfire_grace_time=900)
     # def manual_ladder_orders_job():
-    #     print('\n:test_ladder_orders_job:')
-    #
+    #     print('\n:manual_ladder_orders_job:')
+    # 
     #     next_months_product_id, next_month = app.cb_adv_api.check_for_contract_expires()
-    #     print("next_months_product_id:", next_months_product_id)
-    #     print("next_month:", next_month)
+    #     # print("next_months_product_id:", next_months_product_id)
+    #     # print("next_month:", next_month)
     #
     #     # Get this months current product
     #     relevant_future_product = app.cb_adv_api.get_relevant_future_from_db(month_override=next_month)
-    #     print(" relevant_future_product:", relevant_future_product.product_id)
-    #
-    #     # Get Current Bid Ask Prices
-    #     cur_future_bid_ask_price = app.cb_adv_api.get_current_bid_ask_prices(
-    #         relevant_future_product.product_id)
-    #     cur_future_bid_price = cur_future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
-    #     cur_future_ask_price = cur_future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
-    #     print(f" Prd: {relevant_future_product.product_id} - "
-    #           f"Current Futures: bid: ${cur_future_bid_price} "
-    #           f"ask: ${cur_future_ask_price}")
+    #     # print(" relevant_future_product:", relevant_future_product.product_id)
     #
     #     # side = "BUY"
     #     side = "SELL"
-    #     print(" side:", side)
+    #     # print(" side:", side)
     #
-    #     # How many ladder orders?
-    #     # ladder_order_qty = 8
-    #     ladder_order_qty = app.config['LADDER_QUANTITY']
-    #
-    #     # Override the starting entry price
-    #     manual_price = '63250'
-    #
-    #     app.trade_manager.ladder_orders(quantity=ladder_order_qty, side=side,
-    #                                     product_id=relevant_future_product.product_id,
-    #                                     bid_price=cur_future_bid_price,
-    #                                     ask_price=cur_future_ask_price,
-    #                                     manual_price=manual_price)
-
-    # @scheduler.task('interval', id='future_positions', seconds=1000000, misfire_grace_time=900)
-    # def get_current_position_job():
-    #     app.custom_log.log(True, "I", None, msg1="------------------------------")
-    #     app.custom_log.log(True, "I", None, msg1=":get_current_position_job:")
-    #
-    #     future_contract = app.cb_adv_api.get_relevant_future_from_db()
-    #
-    #     # Get Current Positions
-    #     future_positions = app.cb_adv_api.get_future_position(future_contract.product_id)
-    #     pp(future_positions)
+    #     # Also, create the DCA ladder orders
+    #     app.trade_manager.create_ladder_trades(trade_side=side,
+    #                                            product_id=relevant_future_product.product_id)
 
     scheduler.init_app(app)
     scheduler.start()

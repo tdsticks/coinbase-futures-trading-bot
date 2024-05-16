@@ -49,12 +49,12 @@ class Config:
     # Trading and order creation controls
     ###############################
     ENABLE_ORDER_CREATION = True  # Enable order creation (all/any orders)
-    ENABLE_MAIN_ORDER_CREATION = True  # Enable the main (first) order
+    ENABLE_MAIN_ORDER_CREATION = False  # Enable the main (first) order
     ENABLE_TAKE_PROFIT_CREATION = True  # Enable take profit order creation
     # ENABLE_TRAILING_TAKE_PROFIT = True  # Enable trailing take profit feature
 
     # Do we want to Dollar-Cost Average (DCA) ladder orders?
-    ENABLE_LADDER_CREATION = False
+    ENABLE_LADDER_CREATION = True
 
     # This is the difference percentage in price from the current average price to the
     #   last 15 minute signal price. It's 1 percent by default.
@@ -71,12 +71,12 @@ class Config:
 
     # Take profit settings
     #   At what percentage do we want to place the take profit order?
-    # TAKE_PROFIT_PERCENTAGE = 0.01  # Take Profit Order = 1%
-    TAKE_PROFIT_PERCENTAGE = 0.005  # Take Profit Order = 0.5%
+    TAKE_PROFIT_PERCENTAGE = 0.01  # Take Profit Order = 1%
+    # TAKE_PROFIT_PERCENTAGE = 0.005  # Take Profit Order = 0.5%
 
     INITIAL_TAKE_PROFIT = 0.005  # 0.5%
     TRAILING_THRESHOLD = 0.005  # Start trailing after reaching 0.5%
-    TRAILING_OFFSET = 0.002  # 0.2% below the highest price
+    TRAILING_OFFSET = 0.002  # 0.2% below the highest or above lowest price
 
     # NOTE: ONLY SET THIS TO MANUALLY OVERRIDE THE TAKE PROFIT PRICE
     #   I'm still seeing issues with Coinbase's avg_entry_price from the positions

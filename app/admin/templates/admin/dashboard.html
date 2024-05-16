@@ -1,0 +1,124 @@
+{% extends 'admin/master.html' %}
+
+
+{% block body %}
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-12">
+                <h2>Bot Dashboard</h2>
+                <div class="row">
+                    <div class="col-md-4">
+                        <h3>Latest Aurox Signals</h3>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Price</th>
+                                    <th>Signal</th>
+                                    <th>Trading Pair</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for signal in latest_signals %}
+                                    <tr>
+                                        <td>{{ signal.timestamp }}</td>
+                                        <td>{{ signal.price }}</td>
+                                        <td>{{ signal.signal }}</td>
+                                        <td>{{ signal.trading_pair }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-md-4">
+                        <h3>Latest Futures Positions</h3>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Product</th>
+                                    <th>Side</th>
+                                    <th>Contracts</th>
+                                    <th>Entry Price</th>
+                                    <th>Unrealized PnL</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for position in latest_positions %}
+                                    <tr>
+                                        <td>{{ position.id }}</td>
+                                        <td>{{ position.product_id }}</td>
+                                        <td>{{ position.side }}</td>
+                                        <td>{{ position.number_of_contracts }}</td>
+                                        <td>{{ position.avg_entry_price }}</td>
+                                        <td>{{ position.unrealized_pnl }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-md-4">
+                        <h3>Latest Futures Orders</h3>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Order ID</th>
+                                    <th>Product</th>
+                                    <th>Side</th>
+                                    <th>Limit Price</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for order in latest_orders %}
+                                    <tr>
+                                        <td>{{ order.id }}</td>
+                                        <td>{{ order.order_id }}</td>
+                                        <td>{{ order.product_id }}</td>
+                                        <td>{{ order.side }}</td>
+                                        <td>{{ order.limit_price }}</td>
+                                        <td>{{ order.order_status }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <h3>Trading Chart</h3>
+                        <div id="trading-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script type="text/javascript">
+        new TradingView.widget({
+            "container_id": "trading-chart",
+            "autosize": true,
+            "symbol": "COINBASE:BTCUSD",
+            "interval": "60",
+            "timezone": "Etc/UTC",
+            "theme": "light",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#f1f3f6",
+            "enable_publishing": false,
+            "hide_legend": false,
+            "save_image": false,
+            "studies": [
+                "MACD@tv-basicstudies"
+            ],
+            "show_popup_button": true,
+            "popup_width": "1000",
+            "popup_height": "650"
+        });
+    </script>
+{% endblock %}

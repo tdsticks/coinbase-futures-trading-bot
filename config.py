@@ -138,7 +138,7 @@ class Config:
     #   You can set all of these to 1, however your Take Profit will be further
     #   away due to DCA with your ladder orders.
     # NOTE: 2 contacts is double and 3 is triple the amount of a purchase!
-    DCA_CONTRACTS = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+    DCA_CONTRACTS = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 
     # Contract switching period
     #   This set the days left for the current future contract

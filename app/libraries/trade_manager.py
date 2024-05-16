@@ -514,12 +514,12 @@ class TradeManager:
                          "score and direction, let's wait...", )
 
     def calc_avg_filled_price(self, order, dca_side):
-        self.log(True, "D", None, ":Calc Avg Filled Price:")
+        # self.log(True, "D", None, ":Calc Avg Filled Price:")
 
-        dca_total_filled_price, dca_total_contract_size = self.cb_adv_api.get_dca_filled_orders_from_db(
+        dca_total_filled_price, dca_total_base_size = self.cb_adv_api.get_dca_filled_orders_from_db(
             dca_side=dca_side)
         # self.log(True, "I", "    DCA Total Filled Price", dca_total_filled_price)
-        # self.log(True, "I", "    DCA Total Contract Size", dca_total_contract_size)
+        # self.log(True, "I", "    DCA Total Base Size", dca_total_base_size)
 
         # Get the MAIN order total filled price
         main_order_total_filled_price = order.total_filled_price
@@ -530,13 +530,13 @@ class TradeManager:
         # self.log(True, "I", "    MAIN Order Base Size", main_order_base_size)
 
         # Add up all of the total order base sizes
-        main_and_dca_base_size = main_order_base_size + dca_total_contract_size
+        main_and_dca_base_size = main_order_base_size + dca_total_base_size
         # self.log(True, "I", "    TOTAL - MAIN and DCA Base Size", main_and_dca_base_size)
 
         # Now take to total filled prices from the MAIN order(s) and add to all or any
         #   DCA total filled prices, then divide by the total number of base sizes (contracts)
         avg_filled_price = round((main_order_total_filled_price + dca_total_filled_price) / main_and_dca_base_size)
-        # self.log(True, "I", "    TOTAL - ORDERS Avg Filled Price", avg_filled_price)
+        self.log(True, "I", "    TOTAL - ORDERS Avg Filled Price", avg_filled_price)
 
         return avg_filled_price
 

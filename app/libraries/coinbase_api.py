@@ -780,7 +780,7 @@ class CoinbaseAdvAPI:
         dca_total_filled_price = 0
         # dca_avg_filled_price = 0
         dca_count = 0  # This includes the MAIN initial order
-        dca_contract_size = 0
+        dca_total_base_size = 0
         quantity = self.app.config['LADDER_QUANTITY']
         # self.log(True, "I", "    quantity", quantity)
 
@@ -798,28 +798,28 @@ class CoinbaseAdvAPI:
                 # self.log(True, "I", "    dca_order.limit_price", dca_order.limit_price)
                 # self.log(True, "I", "    dca_order.average_filled_price", dca_order.average_filled_price)
 
-                contract_size = int(self.app.config['DCA_CONTRACTS'][i])
-                # self.log(True, "I", "    contract_size", contract_size)
+                dca_base_size = int(dca_order.base_size)
+                # self.log(True, "I", "    dca_base_size", dca_base_size)
 
-                dca_contract_size += contract_size
-                # self.log(True, "I", "    dca_contract_size", dca_contract_size)
-
-                dca_filled_total = int(dca_order.average_filled_price) * contract_size
+                dca_filled_total = int(dca_order.average_filled_price) * dca_base_size
                 # self.log(True, "I", "    dca_filled_total", dca_filled_total)
 
                 dca_count += 1
+                dca_total_base_size += dca_base_size
+
                 # Get the total filled price (avg filled price + contract size)
                 dca_total_filled_price += round(dca_filled_total)
+                # self.log(True, "I", "    DCA Total Filled Price 1", dca_total_filled_price)
 
-        # self.log(True, "I", "    DCA Total Filled Price", dca_total_filled_price)
-        # self.log(True, "I", "    DCA Contract Size", dca_contract_size)
+        # self.log(True, "I", "    DCA Total Filled Price 2", dca_total_filled_price)
+        # self.log(True, "I", "    DCA Total Base Size", dca_total_base_size)
         # self.log(True, "I", "    DCA Count", dca_count)
 
         if dca_count > 0:
             dca_total_filled_price = round(dca_total_filled_price)
         # self.log(True, "I", "    DCA Total Filled Price 1", dca_total_filled_price)
 
-        return dca_total_filled_price, dca_contract_size
+        return dca_total_filled_price, dca_total_base_size
 
     def cancel_order(self, order_ids: list):
         self.log(True, "D", "cancel_order")

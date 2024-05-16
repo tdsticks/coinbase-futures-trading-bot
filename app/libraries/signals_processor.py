@@ -527,10 +527,13 @@ class SignalProcessor:
                        f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
                 trading_permitted = True
 
-        # Check the Mid TF and Lower TF direction first and a STRONG lower TF strength
-        elif group2['direction'] == group3['direction'] and group3['strength'] == 'STRONG':
+        # Check the Mid TF and Lower TF direction first and
+        # a MODERATE Mid TF STRONG lower TF strength or a STRONG Mid TF STRONG lower TF strength
+        elif (group2['direction'] == group3['direction'] and
+              (group2['strength'] == 'MODERATE' and group3['strength'] == 'STRONG') or
+              (group2['strength'] == 'STRONG' and group3['strength'] == 'STRONG')):
             msg = (f"Mid-level and Lower are same direction with lower strength of: {group3['strength']}"
-                   f"\nHigher TF Strength: {group1['strength']} | Mid-level TF Strength: {group2['strength']}")
+                   f"\n and Mid-level TF Strength: {group2['strength']}")
             trading_permitted = True
 
         # REVIEW: Disabling this for now as we may not want to factor in the higher timeframes with

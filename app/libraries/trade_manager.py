@@ -180,6 +180,7 @@ class TradeManager:
         # Get our 5 min and 15 min signals for matching against later
         five_min_signals = self.signal_processor.get_latest_five_min_signal()
         fifteen_min_signals = self.signal_processor.get_latest_fifteen_min_signal()
+        thirty_min_signals = self.signal_processor.get_latest_thirty_min_signal()
 
         # Get our signal data (trading condition, direction and signal groups)
         trading_permitted, trade_direction, groups = self.signal_processor.run()
@@ -224,7 +225,6 @@ class TradeManager:
 
             main_base_size = 0
             main_avg_filled_price = 0
-            main_total_filled_price = 0
 
             # If we have multiple main orders by accident, let's consolidate values
             #   for calculating later
@@ -336,27 +336,34 @@ class TradeManager:
                     if trade_direction == 'long':
                         self.log(True, "I", None,
                                  " >>> Signals are strong bullish, "
-                                 "see if we should place a trade using the 5 & 15 min signals")
+                                 f"see if we should place a trade using the {fifteen_min_signals.time_unit} "
+                                 f"& {thirty_min_signals.time_unit} min signals")
                     else:
                         self.log(True, "I", None,
                                  " >>> Signals are strong bearish, "
-                                 "see if we should place a trade using the 5 & 15 min signals")
+                                 f"see if we should place a trade using the {fifteen_min_signals.time_unit} "
+                                 f"& {thirty_min_signals.time_unit} min signals")
 
                     # NOTE: Next, let's look at the 5 and 15 minute and how close to the
                     #  last signal and price of the 15 min when we should place a limit order.
                     #  How far in price are we away from the last signal?
                     #  Is 15 Minute signal side the same as the trade_direction side?
 
-                    five_min_trade_signal = five_min_signals.signal
+                    # five_min_trade_signal = five_min_signals.signal
                     fifteen_min_trade_signal = fifteen_min_signals.signal
-                    self.log(True, "I", None, " >>> 5 Min Signal Direction", five_min_trade_signal)
-                    self.log(True, "I", None, " >>> 15 Min Signal Direction", fifteen_min_trade_signal)
+                    thirty_min_signals = thirty_min_signals.signal
+                    # self.log(True, "I", None, f" >>> {five_min_trade_signal.time_unit} Signal Direction",
+                    #        five_min_trade_signal)
+                    self.log(True, "I", None, f" >>> {fifteen_min_trade_signal.time_unit} Signal Direction",
+                             fifteen_min_trade_signal)
+                    self.log(True, "I", None, f" >>> {thirty_min_signals.time_unit} Signal Direction",
+                             thirty_min_signals)
                     self.log(True, "I", None, " >>> Trade Signal Direction", trade_direction)
 
-                    # Does the 5 Min and 15 Min match the overall signal trade direction of the Aurox signals?
-                    if five_min_trade_signal == trade_direction and fifteen_min_trade_signal == trade_direction:
+                    # Does the 15 Min and 30 Min match the overall signal trade direction of the Aurox signals?
+                    if fifteen_min_trade_signal == trade_direction and thirty_min_signals == trade_direction:
                         self.log(True, "I", None,
-                                 "   >>> YES, the 5 Min & 15 Min matches the overall trade direction")
+                                 "   >>> YES, the 15 Min & 30 Min matches the overall trade direction")
 
                         # Check to see if next months product id is populated
                         if next_months_product_id is None:
@@ -476,14 +483,20 @@ class TradeManager:
                     else:
                         self.log(True, "W", None,
                                  "   >>> NO, the 5 Min and 15 Min does not match the overall trade direction")
-                        five_min_pos_trade_dir_msg = (f"     >>> 5 Min Signal: {five_min_trade_signal} "
-                                                      f"!= Signal Trade Direction: {trade_direction}")
-                        fifteen_min_pos_trade_dir_msg = (f"     >>> 15 Min Signal: {fifteen_min_trade_signal} "
+                        # five_min_pos_trade_dir_msg = (f"     >>> 5 Min Signal: {five_min_trade_signal} "
+                        #                               f"!= Signal Trade Direction: {trade_direction}")
+                        fifteen_min_pos_trade_dir_msg = (f"     >>>  {fifteen_min_signals.time_unit} "
+                                                         f"Signal: {fifteen_min_trade_signal} "
                                                          f"!= Signal Trade Direction: {trade_direction}")
-                        self.log(True, "W", None,
-                                 five_min_pos_trade_dir_msg)
+                        thirty_min_pos_trade_dir_msg = (f"     >>> {thirty_min_signals.time_unit} "
+                                                        f"Signal: {thirty_min_signals} "
+                                                        f"!= Signal Trade Direction: {trade_direction}")
+                        # self.log(True, "W", None,
+                        #          five_min_pos_trade_dir_msg)
                         self.log(True, "W", None,
                                  fifteen_min_pos_trade_dir_msg)
+                        self.log(True, "W", None,
+                                 thirty_min_pos_trade_dir_msg)
                 else:
                     self.log(True, "W", None,
                              "\nSignal score is neutral, let's wait...", )

@@ -131,7 +131,7 @@ def setup_scheduler(app):
     # @scheduler.task('interval', id='do_job_6', seconds=15, misfire_grace_time=900)
     # def manual_ladder_orders_job():
     #     print('\n:manual_ladder_orders_job:')
-    # 
+    #
     #     next_months_product_id, next_month = app.cb_adv_api.check_for_contract_expires()
     #     # print("next_months_product_id:", next_months_product_id)
     #     # print("next_month:", next_month)

@@ -23,6 +23,7 @@ from app.libraries.coinbase_api import CoinbaseAdvAPI
 from app.libraries.signals_processor import SignalProcessor
 from app.libraries.trade_manager import TradeManager
 from app.libraries.trailing_take_profit import TrailingTakeProfit
+from app.libraries.list_orders_websocket import ListOrdersWebsocket
 from app.scheduler.tasks import setup_scheduler
 
 # TODO: What happens if the Aurox site goes down or has interruptions and we don't receive signals?
@@ -70,6 +71,7 @@ def create_app(config_class=Config):
     app.signal_processor = SignalProcessor(app)
     app.trade_manager = TradeManager(app)
     app.trailing_take_profit = TrailingTakeProfit(app)
+    app.list_orders_websocket = ListOrdersWebsocket(app)
     setup_scheduler(app)
 
     # Create all the models (tables) in the db
@@ -87,6 +89,7 @@ def create_app(config_class=Config):
     # This will start the WebSocket client in a separate thread
     # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_cb_wsclient)
     # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_trailing_take_profit)
+    # websocket_thread = threading.Thread(target=app.list_orders_websocket.run_websocket)
     # websocket_thread.daemon = True  # Daemonize thread to terminate with the main app
     # websocket_thread.start()
 

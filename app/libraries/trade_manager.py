@@ -586,8 +586,8 @@ class TradeManager:
                 self.cb_adv_api.get_current_average_price(product_id=product_id))
             self.log(True, "I", "   bid ask avg_price", avg_price)
             #
-            #     # How many ladder orders? (10 max)
-            #     # ladder_order_qty = 8
+            #     # How many ladder orders?
+            #     # ladder_order_qty = 10
             #     ladder_order_qty = self.app.config['LADDER_QUANTITY']
             #
             #     # Create the DCA ladder orders

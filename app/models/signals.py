@@ -11,6 +11,7 @@ class AuroxSignal(db.Model):
     trading_pair = db.Column(db.String(30), nullable=True)
     time_unit = db.Column(db.String(10), nullable=True)
     message = db.Column(db.Text, nullable=True)
+    historical_signals = db.relationship('HistoricalAuroxSignal', backref='original_signal', lazy=True)
 
     def __repr__(self):
         return f"<AuroxSignal {self.trading_pair} {self.signal} @ {self.timestamp}>"
@@ -30,3 +31,20 @@ class FuturePriceAtSignal(db.Model):
 
     def __repr__(self):
         return f"<FuturePriceAtSignal bid={self.future_bid_price} ask={self.future_ask_price} signal_id={self.signal_id} future_id={self.future_id}>"
+
+
+class HistoricalAuroxSignal(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, nullable=True)
+    price = db.Column(db.String(20), nullable=True)
+    signal = db.Column(db.String(10), nullable=True)
+    trading_pair = db.Column(db.String(30), nullable=True)
+    time_unit = db.Column(db.String(10), nullable=True)
+    message = db.Column(db.Text, nullable=True)
+    original_signal_id = db.Column(db.Integer, db.ForeignKey('aurox_signal.id'), nullable=False)
+    signal_spot_price = db.Column(db.Float, nullable=True)
+    future_bid_price = db.Column(db.Float, nullable=True)
+    future_ask_price = db.Column(db.Float, nullable=True)
+
+    def __repr__(self):
+        return f"<HistoricalAuroxSignal {self.trading_pair} {self.signal} @ {self.timestamp}>"

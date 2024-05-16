@@ -30,11 +30,3 @@ admin.add_view(FuturesOrderAdmin(FuturesOrder, db.session))
 def setup_admin(app):
     admin.init_app(app)
     app.register_blueprint(admin_bp, url_prefix='/admin')
-
-
-# Add Flask Admin
-# admin = Admin(app, name='ATB Admin Panel',
-#               index_view=MyAdminIndexView(),
-#               template_mode='bootstrap4',
-#               # base_template='admin/my_admin.html'
-#               )

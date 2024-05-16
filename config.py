@@ -130,15 +130,19 @@ class Config:
     #  or more in your account for all 10 orders!
 
     # How many DCA order do we want to use? (you need to have funds to back up all the orders!)
-    LADDER_QUANTITY = 10  # 10 Max unless you add more.
+    LADDER_QUANTITY = 15  # 15 Max unless you add more.
+
     # 0.005 = 0.5%, 0.01 = 1%, 0.1 = 10%, etc.
-    DCA_TRADE_PERCENTAGES = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.04, 0.06, 0.08, 0.1]
+    # DCA_TRADE_PERCENTAGES = [0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.04, 0.06, 0.08, 0.1]
+    DCA_TRADE_PERCENTAGES: [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11,
+                            0.12, 0.13, 0.14, 0.15]
 
     # Size of the contracts to purchase per DCA trade
     #   You can set all of these to 1, however your Take Profit will be further
     #   away due to DCA with your ladder orders.
     # NOTE: 2 contacts is double and 3 is triple the amount of a purchase!
-    DCA_CONTRACTS = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    # DCA_CONTRACTS = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2]  # 14 contracts
+    DCA_CONTRACTS: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  # 15 contracts
 
     # Contract switching period
     #   This set the days left for the current future contract

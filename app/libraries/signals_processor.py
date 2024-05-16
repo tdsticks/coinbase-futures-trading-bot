@@ -4,7 +4,8 @@ from app.models import db, set_db_errors, joinedload
 import pytz
 
 # Models
-from app.models.signals import AuroxSignal, FuturePriceAtSignal
+from app.models.signals import (AuroxSignal, FuturePriceAtSignal,
+                                HistoricalAuroxSignal)
 
 
 class SignalProcessor:
@@ -32,7 +33,6 @@ class SignalProcessor:
         # Also write a record using the signal spot price, futures bid and ask
         #   and store the relationship ids to both
         with self.app.app_context():  # Push an application context
-            # try:
             # Convert timestamp to datetime object if necessary
             # timestamp = data['timestamp']
             timestamp = datetime.strptime(data['timestamp'], "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -112,12 +112,13 @@ class SignalProcessor:
                     future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
             except AttributeError as e:
                 self.log(True, "E",
-                         "Unable to get Future Bid and Ask Prices",
-                         "AttributeError:", e)
+                         "Unable to get Future Bid and Ask Prices", "AttributeError:", e)
             except ValueError as e:
                 self.log(True, "E",
-                         "Unable to get Future Bid and Ask Prices",
-                         "ValueError:", e)
+                         "Unable to get Future Bid and Ask Prices", "ValueError:", e)
+
+            # Save the existing signal to historical records
+            self.save_historical_signal(existing_signal, future_bid_price, future_ask_price)
 
             if next_months_product_id:
                 self.log(True, "I",
@@ -161,18 +162,38 @@ class SignalProcessor:
                     db.session.commit()
             except self.db_errors as e:
                 self.log(True, "E",
-                         "    >>> Error with storing or retrieving FuturePriceAtSignal",
-                         str(e))
+                         "    >>> Error with storing or retrieving FuturePriceAtSignal", str(e))
 
                 # self.app.db.session.rollback()
                 db.session.rollback()
 
-            # except self.db_errors as e:
-            #     self.log(True, "E",
-            #              "    >>> Error with storing or retrieving the Aurox signal",
-            #              str(e))
-
         return signal_stored
+
+    def save_historical_signal(self, signal, future_bid_price, future_ask_price):
+        self.log(True, "I", None, ":save_historical_signal:")
+
+        with self.app.app_context():  # Push an application context
+            try:
+                historical_signal = HistoricalAuroxSignal(
+                    timestamp=signal.timestamp,
+                    price=signal.price,
+                    signal=signal.signal,
+                    trading_pair=signal.trading_pair,
+                    time_unit=signal.time_unit,
+                    message=signal.message,
+                    original_signal_id=signal.id,
+                    signal_spot_price=signal.price,
+                    future_bid_price=future_bid_price,
+                    future_ask_price=future_ask_price
+                )
+                db.session.add(historical_signal)
+                db.session.commit()
+            except self.db_errors as e:
+                self.log(True, "E",
+                         "    >>> Error with storing HistoricalAuroxSignal", str(e))
+
+                # self.app.db.session.rollback()
+                db.session.rollback()
 
     def get_latest_weekly_signal(self):
         # self.log(True, "D", None,

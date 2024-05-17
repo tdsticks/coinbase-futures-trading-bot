@@ -96,14 +96,14 @@ def create_app(config_class=Config):
     # websocket_thread.start()
 
     product_id = "BIT-31MAY24-CDE"
-    start = datetime(2024, 5, 2)
-    end = datetime(2024, 5, 2)
-    candles = app.cb_adv_api.get_candles(product_id=product_id,
-                                         start=start,
-                                         end=end)
-    # print("candles:", candles, type(candles))
-
-    app.cb_adv_api.save_futures_candles_to_db(product_id, candles)
+    # start = datetime(year=2024, month=5, day=1, hour=0)
+    start = datetime(year=2024, month=5, day=1)
+    # end = datetime(year=2024, month=5, day=1, hour=1)
+    end = datetime(year=2024, month=5, day=2)
+    # app.cb_adv_api.get_and_store_candles(product_id=product_id,
+    #                                      start=start,
+    #                                      end=end,
+    #                                      historical=True)
 
     # logger.info("create_app Complete")
     app.custom_log.log(True, "I", None,

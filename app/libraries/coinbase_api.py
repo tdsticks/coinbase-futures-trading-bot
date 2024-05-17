@@ -5,6 +5,7 @@ from app.models.futures import (CoinbaseFuture, AccountBalanceSummary,
 from dotenv import load_dotenv
 import calendar
 from datetime import datetime, timedelta
+import time
 import pytz
 from pprint import pprint as pp
 import uuid
@@ -493,39 +494,49 @@ class CoinbaseAdvAPI:
 
         return cur_future_bid_price, cur_future_ask_price, cur_future_avg_price
 
-    def get_candles(self, product_id, start=None, end=None):
-        self.log(True, "D", None, ":get_candles:")
+    def get_and_store_candles(self, product_id, start=None, end=None, historical=False):
+        self.log(True, "D", None, ":get_and_store_candles:")
         """
             start = datetime(2023, 5, 1)
             end = datetime(2023, 5, 2)
         """
         granularity = "ONE_MINUTE"
-        # granularity = "FIVE_MINUTE"
 
-        # Get today if we don't have a start and end time
-        if start is None and end is None:
-            start = datetime.now() - timedelta(hours=1)
-            end = datetime.now()
-        start_time = start - timedelta(hours=1)
-        end_time = end
+        if historical:
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            # end = datetime.now()
+            end = end
         self.log(True, "D", None, f"start: {start}, end: {end}")
 
-        start_unix_time = str(int(start_time.timestamp()))
-        end_unix_time = str(int(end_time.timestamp()))
-        self.log(True, "D", None, f"start_time: {start_time}, end_time: {end_time}")
+        while start < end:
+            candles = []
 
-        get_candles = self.client.get_candles(product_id=product_id, start=start_unix_time,
-                                              end=end_unix_time, granularity=granularity)
-        # self.log(True, "I", "get_candles", get_candles['candles'])
+            next_hour = start + timedelta(hours=1)
+            if next_hour > end:
+                next_hour = end
 
-        return get_candles
+            start_unix_time = str(int(start.timestamp()))
+            end_unix_time = str(int(next_hour.timestamp()))
+            self.log(True, "D", None, f"Fetching candles from {start} to {next_hour}")
+
+            response = self.client.get_candles(product_id=product_id, start=start_unix_time,
+                                               end=end_unix_time, granularity=granularity)
+            if response and 'candles' in response:
+                candles.extend(response['candles'])
+            self.log(True, "I", "candles", candles)
+
+            self.save_futures_candles_to_db(product_id, candles)
+
+            start = next_hour
+            time.sleep(5)
 
     # Example function to save candle data to the database
     def save_futures_candles_to_db(self, product_id, candles):
         self.log(True, "D", None, ":save_futures_candles_to_db:")
 
         with self.app.app_context():
-            for candle in reversed(candles['candles']):
+            # for candle in reversed(candles['candles']):
+            for candle in reversed(candles):
                 try:
                     start_time = datetime.fromtimestamp(int(candle['start']))
                     low = float(candle['low'])

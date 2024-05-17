@@ -1,9 +1,9 @@
-from datetime import time
-import pytz
-from dotenv import load_dotenv
-
 # Models
 from app.models.futures import FuturePosition
+from datetime import time, datetime
+import holidays
+import pytz
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -142,6 +142,11 @@ class TradeManager:
         break_start = time(17, 0, 0)  # 5 PM
         break_end = time(18, 0, 0)  # 6 PM
 
+        # Check if today is a holiday
+        # us_holidays = holidays.US()
+        us_holidays = holidays.country_holidays('US')
+        is_holiday = current_time.date() in us_holidays
+
         # Trading conditions
         is_during_week = weekday < 5  # Monday to Friday
         is_before_break = current_time_only < break_start
@@ -150,6 +155,9 @@ class TradeManager:
         is_friday_before_5pm = weekday == 4 and current_time_only < break_start  # Before 5 PM on Friday
 
         # Determine if it's a valid trading time
+        if is_holiday:
+            self.log(True, "W", None, " >>> Futures market is CLOSED (Holiday). <<<")
+            return False
         if is_during_week and (is_before_break or is_after_break):
             self.log(True, "I", None, " >>> Futures market is OPEN! <<<")
             return True

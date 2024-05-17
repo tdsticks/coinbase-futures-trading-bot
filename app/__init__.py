@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from flask import Flask
 from flask_migrate import Migrate
 from flask_login import LoginManager
@@ -71,7 +73,7 @@ def create_app(config_class=Config):
     app.signal_processor = SignalProcessor(app)
     app.trade_manager = TradeManager(app)
     app.trailing_take_profit = TrailingTakeProfit(app)
-    app.list_orders_websocket = ListOrdersWebsocket(app)
+    # app.list_orders_websocket = ListOrdersWebsocket(app)
     setup_scheduler(app)
 
     # Create all the models (tables) in the db
@@ -92,6 +94,16 @@ def create_app(config_class=Config):
     # websocket_thread = threading.Thread(target=app.list_orders_websocket.run_websocket)
     # websocket_thread.daemon = True  # Daemonize thread to terminate with the main app
     # websocket_thread.start()
+
+    product_id = "BIT-31MAY24-CDE"
+    start = datetime(2024, 5, 2)
+    end = datetime(2024, 5, 2)
+    candles = app.cb_adv_api.get_candles(product_id=product_id,
+                                         start=start,
+                                         end=end)
+    # print("candles:", candles, type(candles))
+
+    app.cb_adv_api.save_futures_candles_to_db(product_id, candles)
 
     # logger.info("create_app Complete")
     app.custom_log.log(True, "I", None,

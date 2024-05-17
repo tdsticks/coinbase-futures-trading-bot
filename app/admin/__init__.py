@@ -1,11 +1,12 @@
 from flask import Blueprint
 from flask_admin import Admin
-from app.models.admin import User
+from app.models.admin import User, Role
+from app.models import db
 from app.models.futures import AccountBalanceSummary, FuturesOrder, FuturePosition, CoinbaseFuture
 from app.models.signals import AuroxSignal
-
-from .routes import *
-from .admin import *
+from .routes import MyAdminIndexView
+from .admin import (UserAdmin, RoleAdmin, BalancesAdmin, CoinbaseFutureAdmin, AuroxSignalAdmin,
+                    FuturesPositionAdmin, FuturesOrderAdmin)
 
 # Initialize Blueprint
 admin_bp = Blueprint('admin_bp', __name__,

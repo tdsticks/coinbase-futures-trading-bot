@@ -1,10 +1,10 @@
 from coinbase.rest import RESTClient
 from app.models import db, set_db_errors, and_
 from app.models.futures import (CoinbaseFuture, AccountBalanceSummary,
-                                FuturePosition, FuturesOrder)
+                                FuturePosition, FuturesOrder, FuturesCandleData)
 from dotenv import load_dotenv
 import calendar
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from pprint import pprint as pp
 import uuid
@@ -25,6 +25,8 @@ class CoinbaseAdvAPI:
         api_key = self.app.config['API_KEY']
         api_secret = self.app.config['API_SECRET']
         # UUID = self.app.config['UUID']
+
+        self.current_price = 0
 
         self.client = RESTClient(api_key=api_key, api_secret=api_secret, verbose=False)
 
@@ -490,6 +492,76 @@ class CoinbaseAdvAPI:
         #                         "   Current Future Avg Price", cur_future_avg_price)
 
         return cur_future_bid_price, cur_future_ask_price, cur_future_avg_price
+
+    def get_candles(self, product_id, start=None, end=None):
+        self.log(True, "D", None, ":get_candles:")
+        """
+            start = datetime(2023, 5, 1)
+            end = datetime(2023, 5, 2)
+        """
+        granularity = "ONE_MINUTE"
+        # granularity = "FIVE_MINUTE"
+
+        # Get today if we don't have a start and end time
+        if start is None and end is None:
+            start = datetime.now() - timedelta(hours=1)
+            end = datetime.now()
+        start_time = start - timedelta(hours=1)
+        end_time = end
+        self.log(True, "D", None, f"start: {start}, end: {end}")
+
+        start_unix_time = str(int(start_time.timestamp()))
+        end_unix_time = str(int(end_time.timestamp()))
+        self.log(True, "D", None, f"start_time: {start_time}, end_time: {end_time}")
+
+        get_candles = self.client.get_candles(product_id=product_id, start=start_unix_time,
+                                              end=end_unix_time, granularity=granularity)
+        # self.log(True, "I", "get_candles", get_candles['candles'])
+
+        return get_candles
+
+    # Example function to save candle data to the database
+    def save_futures_candles_to_db(self, product_id, candles):
+        self.log(True, "D", None, ":save_futures_candles_to_db:")
+
+        with self.app.app_context():
+            for candle in reversed(candles['candles']):
+                try:
+                    start_time = datetime.fromtimestamp(int(candle['start']))
+                    low = float(candle['low'])
+                    high = float(candle['high'])
+                    open_ = float(candle['open'])
+                    close = float(candle['close'])
+                    volume = float(candle['volume'])
+
+                    # Check if the record already exists
+                    existing_candle = FuturesCandleData.query.filter_by(product_id=product_id, start_time=start_time).first()
+
+                    if existing_candle:
+                        # Update the existing record
+                        existing_candle.low = low
+                        existing_candle.high = high
+                        existing_candle.open = open_
+                        existing_candle.close = close
+                        existing_candle.volume = volume
+                        # self.log(True, "I", "Updated existing candle", existing_candle)
+                    else:
+                        # Create a new record
+                        new_candle = FuturesCandleData(
+                            product_id=product_id,
+                            start_time=start_time,
+                            low=low,
+                            high=high,
+                            open=open_,
+                            close=close,
+                            volume=volume
+                        )
+                        db.session.add(new_candle)
+                        # self.log(True, "I", "Added new candle", new_candle)
+                    db.session.commit()
+                except Exception as e:
+                    self.log(True, "I", "Error processing candle", candle, f"Error: {e}")
+                    db.session.rollback()
 
     @staticmethod
     def generate_uuid4():

@@ -116,3 +116,19 @@ class FuturePosition(db.Model):
 
     def __repr__(self):
         return f'<FuturePosition {self.product_id} {self.side}>'
+
+
+class FuturesCandleData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.String(128), nullable=False)
+    start_time = db.Column(db.DateTime, nullable=False)
+    low = db.Column(db.Float, nullable=False)
+    high = db.Column(db.Float, nullable=False)
+    open = db.Column(db.Float, nullable=False)
+    close = db.Column(db.Float, nullable=False)
+    volume = db.Column(db.Float, nullable=False)
+
+    def __repr__(self):
+        return (f"FuturesCandleData(product_id={self.product_id}, start_time={self.start_time}, "
+                f"low={self.low}, high={self.high}, open={self.open}, close={self.close}, "
+                f"volume={self.volume})")

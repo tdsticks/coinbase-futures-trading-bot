@@ -21,6 +21,11 @@ class TradeManager:
         self.signal_processor = app.signal_processor
         self.avg_filled_price = None  # Set this for trailing take profit
         self.take_profit_side = ""  # Set this for trailing take profit
+        self.product_id = ""
+        self.side = ""
+        self.number_of_contracts = 0
+        self.calc_percentage = 0
+        self.calc_profit_or_loss = 0
 
     def ladder_orders(self, side: str, product_id: str, bid_price, ask_price,
                       quantity: int = 5, manual_price: str = ''):
@@ -157,6 +162,8 @@ class TradeManager:
     def check_trading_conditions(self):
         self.log(True, "D", None, "--------------------------")
         self.log(True, "D", None, ":check_trading_conditions:")
+
+        # TODO: This method is way too long, need to break up into smaller pieces
 
         # Update any cancelled orders in the database (in case we close things manually, etc.)
         self.cb_adv_api.update_cancelled_orders()
@@ -613,8 +620,10 @@ class TradeManager:
             # self.log(True, "I", "  Profit / Loss: Order Avg Filled Price:", order.average_filled_price)
 
             product_id = position.product_id
+            self.product_id = product_id
             dca_side = ''
             side = position.side
+            self.side = side
             # self.log(True, "I", "  position.product_id:", product_id)
             # self.log(True, "I", "  position.side:", side)
 
@@ -646,6 +655,7 @@ class TradeManager:
             # self.log(True, "I", "    Current Price", current_price)
 
             number_of_contracts = position.number_of_contracts
+            self.number_of_contracts = number_of_contracts
             # self.log(True, "I", "    Number of Contracts", number_of_contracts)
 
             # Calculate total cost and current value per contract
@@ -662,11 +672,13 @@ class TradeManager:
             elif position.side.lower() == 'short':  # Assuming 'sell' denotes a short position
                 calc_profit_or_loss = round(total_initial_cost - total_current_value, 4)
             # self.log(True, "I", "  calc_profit_or_loss", calc_profit_or_loss)
+            self.calc_profit_or_loss = calc_profit_or_loss
 
             if total_initial_cost != 0:  # Prevent division by zero
                 calc_percentage = round((calc_profit_or_loss / total_initial_cost) * 100, 4)
             else:
                 calc_percentage = 0
+            self.calc_percentage = calc_percentage
             # self.log(True, "I", "  calc_percentage:", calc_percentage)
 
             self.log(True, "I", None, ">>>>>>>>>>>>>>>>>>>>>>>>>>>")
@@ -679,10 +691,10 @@ class TradeManager:
             if calc_percentage >= 1:
                 self.log(True, "I", "Take profit at 1% or higher %", calc_percentage)
                 self.log(True, "I", "Good Profit $", calc_profit_or_loss)
-            elif 2 > calc_percentage >= 0.5:
+            elif 1 < calc_percentage >= 0.5:
                 self.log(True, "I", "Ready to take profit %", calc_percentage)
                 self.log(True, "I", "Profit $", calc_profit_or_loss)
-            elif 0.5 >= calc_percentage >= 0:
+            elif 0.5 < calc_percentage >= 0:
                 self.log(True, "I", "Neutral %", calc_percentage)
                 self.log(True, "I", "Not enough profit $", calc_profit_or_loss)
             elif calc_percentage < 0:

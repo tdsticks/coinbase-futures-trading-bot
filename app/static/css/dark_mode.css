@@ -1,7 +1,8 @@
 /* static/css/dark_mode.css */
 body {
     background-color: #333;
-    color: #ccc;
+    /*color: #ccc;*/
+     color: #eee;  /* Brighter white text */
 }
 
 .navbar {
@@ -10,7 +11,20 @@ body {
 
 .table {
     background-color: #222;
-    color: #ccc;
+    /*color: #ccc;*/
+    color: #eee;  /* Brighter white text */
+}
+
+.table th, .table td {
+    font-weight: bold;  /* Bold text */
+}
+
+.table th {
+    color: #fff;  /* Brighter white for table headers */
+}
+
+.table td {
+    color: #eee;  /* Brighter white for table data */
 }
 
 .form-control {
@@ -20,4 +34,68 @@ body {
 
 .label {
     color: #ccc;
+}
+
+/* Custom Container Styles */
+.custom-container {
+    max-width: 90%;
+    margin: 0 auto;
+}
+
+.section h3, .section table {
+    color: #eee;  /* Brighter white for section headers and table text */
+    font-weight: bold;  /* Bold text for section headers and tables */
+}
+
+
+@media (min-width: 768px) {
+    .custom-container {
+        max-width: 80%;
+    }
+}
+
+@media (min-width: 1200px) {
+    .custom-container {
+        max-width: 75%;
+    }
+}
+
+/* Responsive Styles */
+@media (max-width: 767px) {
+    .section {
+        margin-bottom: 20px;
+    }
+    .trading-chart {
+        width: 800px !important; /* Adjust chart height for mobile */
+        height: 400px !important; /* Adjust chart height for mobile */
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+    .section {
+        margin-bottom: 30px;
+    }
+    .trading-chart {
+        width: 800px !important; /* Adjust chart height for tablets */
+        height: 400px !important; /* Adjust chart height for tablets */
+    }
+}
+
+@media (min-width: 1200px) {
+    .container-fluid {
+        max-width: 1200px;
+    }
+    .trading-chart {
+        height: 500px !important; /* Default chart height for desktops */
+    }
+}
+
+/* Custom Column Widths for Latest Orders Table */
+.table-custom th.col-1, .table-custom td.col-1 {
+    width: 8.33%; /* 1/12th of the width */
+}
+
+.table-custom th.col-2, .table-custom td.col-2 {
+    width: 16.66%; /* 2/12ths of the width */
+    font-size: small;
 }

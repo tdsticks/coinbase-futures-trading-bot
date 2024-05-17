@@ -1,6 +1,6 @@
 {% extends 'admin/base.html' %}
 
-{% block stylesheets %}
+{% block head_css %}
     {{ super() }}
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/dark_mode.css') }}">
 {% endblock %}

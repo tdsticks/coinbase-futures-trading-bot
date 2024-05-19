@@ -1,0 +1,18 @@
+.axis path,
+.axis line {
+    fill: none;
+    shape-rendering: crispEdges;
+}
+
+.candlestick rect {
+    stroke: black;
+    stroke-width: 1;
+}
+
+.candlestick .up {
+    fill: green;
+}
+
+.candlestick .down {
+    fill: red;
+}

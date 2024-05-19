@@ -46,25 +46,25 @@ def webhook():
         now = datetime.now(pytz.utc)
 
         # Check if the market is open or not
-        if current_app.trade_manager.is_trading_time(now):
-            try:
-                # Get the SignalProcessor through the TradeManager
-                signal_stored = current_app.trade_manager.signal_processor.write_db_signal(signal_data)
-                current_app.custom_log.log(True, "I", None, "  >>> Signal Stored", signal_stored)
+        # if current_app.trade_manager.is_trading_time(now):
+        try:
+            # Get the SignalProcessor through the TradeManager
+            signal_stored = current_app.trade_manager.signal_processor.write_db_signal(signal_data)
+            current_app.custom_log.log(True, "I", None, "  >>> Signal Stored", signal_stored)
 
-                # Respond back to the webhook sender to acknowledge receipt
-                return jsonify({"Status": "Success", "Message": "Signal received and stored"}), 201
+            # Respond back to the webhook sender to acknowledge receipt
+            return jsonify({"Status": "Success", "Message": "Signal received and stored"}), 201
 
-            except Exception as e:
-                current_app.custom_log.log(True, "E", "Unexpected write_db_signal Error:", msg1=e)
-                return jsonify({"Status": "Unsuccessful",
-                                "Message": "Signal received, but NOT stored",
-                                "Data": data,
-                                "Error": e}), 405
-        else:
+        except Exception as e:
+            current_app.custom_log.log(True, "E", "Unexpected write_db_signal Error:", msg1=e)
             return jsonify({"Status": "Unsuccessful",
-                            "Message": "Market is closed",
-                            "Sata": data}), 204
+                            "Message": "Signal received, but NOT stored",
+                            "Data": data,
+                            "Error": e}), 405
+        # else:
+        #     return jsonify({"Status": "Unsuccessful",
+        #                     "Message": "Market is closed",
+        #                     "Sata": data}), 204
     else:
         # Respond back to the webhook sender to acknowledge receipt
         return jsonify({"Status": "Unsuccessful",

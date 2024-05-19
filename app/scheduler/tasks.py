@@ -14,7 +14,7 @@ scheduler = APScheduler()
 
 def setup_scheduler(app):
     # print(":setup_scheduler:")
-    app.custom_log.log(True, "I", None, "Setting up scheduler...")
+    app.custom_log.log(True, "D", None, "Setting up scheduler...")
 
     enable_balance_summary = app.config['ENABLE_BALANCE_SUMMARY']
     enable_coinbase_futures_products = app.config['ENABLE_COINBASE_FUTURES_PRODUCTS']

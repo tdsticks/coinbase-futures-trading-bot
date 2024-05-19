@@ -92,21 +92,14 @@ def create_app(config_class=Config):
     # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_cb_wsclient)
     # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_trailing_take_profit)
     # websocket_thread = threading.Thread(target=app.list_orders_websocket.run_websocket)
-    # websocket_thread.daemon = True  # Daemonize thread to terminate with the main app
-    # websocket_thread.start()
 
-    product_id = "BIT-31MAY24-CDE"
-    # start = datetime(year=2024, month=5, day=1, hour=0)
-    start = datetime(year=2024, month=5, day=1)
-    # end = datetime(year=2024, month=5, day=1, hour=1)
-    end = datetime(year=2024, month=5, day=2)
-    # app.cb_adv_api.get_and_store_candles(product_id=product_id,
-    #                                      start=start,
-    #                                      end=end,
-    #                                      historical=True)
+    # websocket_thread = threading.Thread(target=app.cb_adv_api.threaded_save_historical_candles)
+    websocket_thread = threading.Thread(target=app.cb_adv_api.threaded_save_current_candles)
+    websocket_thread.daemon = True  # Daemonize thread to terminate with the main app
+    websocket_thread.start()
 
     # logger.info("create_app Complete")
-    app.custom_log.log(True, "I", None,
+    app.custom_log.log(True, "D", None,
                        msg1="---------- Flask create_app Complete ----------")
 
     return app

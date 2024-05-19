@@ -120,7 +120,8 @@ class TradeManager:
 
     def is_trading_time(self, current_time):
         self.log(True, "I", None, "---> Checking for open market...")
-        """Check if the current time is within trading hours.
+        """
+            Check if the current time is within trading hours.
             Trading hours are Sunday 6 PM to Friday 5 PM ET, with a break from 5 PM to 6 PM daily.
         """
         # Define the Eastern Time Zone
@@ -131,28 +132,37 @@ class TradeManager:
             current_time = pytz.utc.localize(current_time).astimezone(eastern)
         else:
             current_time = current_time.astimezone(eastern)
+        print(f"    current_time_only:{current_time}")
 
         # Check day of the week (Monday is 0 and Sunday is 6)
         weekday = current_time.weekday()
+        print(f"    weekday:{weekday}")
 
         # Get the current time as a time object
         current_time_only = current_time.time()
+        print(f"    current_time_only:{current_time_only}")
 
         # Define trading break time
         break_start = time(17, 0, 0)  # 5 PM
         break_end = time(18, 0, 0)  # 6 PM
+        print(f"    break_start:{break_start} break_end:{break_end}")
 
         # Check if today is a holiday
-        # us_holidays = holidays.US()
         us_holidays = holidays.country_holidays('US')
         is_holiday = current_time.date() in us_holidays
+        print(f"    is_holiday:{is_holiday}")
 
         # Trading conditions
-        is_during_week = weekday < 5  # Monday to Friday
+        is_during_week = 0 <= weekday <= 4  # Monday to Friday
         is_before_break = current_time_only < break_start
         is_after_break = current_time_only >= break_end
         is_sunday_after_6pm = weekday == 6 and current_time_only >= time(18, 0, 0)  # After 6 PM on Sunday
         is_friday_before_5pm = weekday == 4 and current_time_only < break_start  # Before 5 PM on Friday
+        print(f"    is_during_week:{is_during_week}")
+        print(f"    is_before_break:{is_before_break}")
+        print(f"    is_after_break:{is_after_break}")
+        print(f"    is_sunday_after_6pm:{is_sunday_after_6pm}")
+        print(f"    is_friday_before_5pm:{is_friday_before_5pm}")
 
         # Determine if it's a valid trading time
         if is_holiday:
@@ -817,7 +827,7 @@ class TradeManager:
 
             # Assign for the Trailing Take Profit Class
             self.avg_filled_price = float(avg_filled_price)
-            self.log(True, "W", "    avg_filled_price", self.avg_filled_price)
+            self.log(True, "I", "    avg_filled_price", self.avg_filled_price)
 
             # Calculate the take profit price (Long or Short)
             take_profit_offset_price = int(float(avg_filled_price) * take_profit_percentage)

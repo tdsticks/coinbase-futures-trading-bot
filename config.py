@@ -42,13 +42,19 @@ class Config:
     #   Time is measured in seconds (60 seconds = 1 min, etc)
     BALANCE_SUMMARY_TIME = 125
     COINBASE_FUTURES_PRODUCTS_TIME = 600
-    TRADING_CONDITIONS_TIME = 30  # This is the main job that opens and checks trading
-    FUTURE_ORDERS_TIME = 35  # Get the future orders and store in the DB
+    TRADING_CONDITIONS_TIME = 40  # This is the main job that opens and checks trading
+    FUTURE_ORDERS_TIME = 45  # Get the future orders and store in the DB
+
+    # Threaded Sleep timers
+    CANDLES_SLEEP = 60  # How often do we get the candles for our product
+
+    # Dashboard template (html) Timer
+    UPDATE_PROFIT_LOSS_TIME = 10000  # in ms 1000 = 1 second
 
     ###############################
     # Trading and order creation controls
     ###############################
-    ENABLE_ORDER_CREATION = True  # Enable order creation (all/any orders)
+    ENABLE_ORDER_CREATION = True  # Enable order creation (FOR ALL ORDERS!!!)
     ENABLE_MAIN_ORDER_CREATION = False  # Enable the main (first) order
     ENABLE_TAKE_PROFIT_CREATION = True  # Enable take profit order creation
     # ENABLE_TRAILING_TAKE_PROFIT = True  # Enable trailing take profit feature

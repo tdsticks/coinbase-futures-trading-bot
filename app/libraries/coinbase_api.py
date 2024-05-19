@@ -494,7 +494,39 @@ class CoinbaseAdvAPI:
 
         return cur_future_bid_price, cur_future_ask_price, cur_future_avg_price
 
-    def get_and_store_candles(self, product_id, start=None, end=None, historical=False):
+    def threaded_save_current_candles(self):
+        self.log(True, "I", None, ":threaded_save_current_candles:")
+
+        product_id = "BIT-31MAY24-CDE"
+        start = datetime.now() - timedelta(hours=1)
+        end = datetime.now()
+        self.log(True, "D", None, f"    start: {start}, end: {end}")
+
+        candles_sleep = self.app.config['CANDLES_SLEEP']
+        self.log(True, "D", None, f"    candles_sleep:{candles_sleep}")
+
+        self.get_and_store_candles(product_id=product_id,
+                                   start=start,
+                                   end=end,
+                                   historical=False,
+                                   sleep=candles_sleep)
+
+    def threaded_save_historical_candles(self):
+        self.log(True, "I", None, ":threaded_save_historical_candles:")
+
+        product_id = "BIT-31MAY24-CDE"
+        start = datetime(year=2024, month=5, day=17, hour=0)
+        end = datetime(year=2024, month=5, day=17, hour=23)
+        # start = datetime(year=2024, month=5, day=16)
+        # end = datetime(year=2024, month=5, day=17)
+        self.get_and_store_candles(product_id=product_id,
+                                   start=start,
+                                   end=end,
+                                   historical=True,
+                                   sleep=10)
+
+    def get_and_store_candles(self, product_id, start, end,
+                              historical=False, sleep=60):
         self.log(True, "D", None, ":get_and_store_candles:")
         """
             start = datetime(2023, 5, 1)
@@ -504,31 +536,43 @@ class CoinbaseAdvAPI:
 
         if historical:
             start = start.replace(hour=0, minute=0, second=0, microsecond=0)
-            # end = datetime.now()
             end = end
-        self.log(True, "D", None, f"start: {start}, end: {end}")
+        self.log(True, "D", None, f"    start: {start}, end: {end}")
 
-        while start < end:
+        current_time = start
+        while current_time < end:
+            # print(f"{current_time} < {end}")
+            # print(f"    is_trading_time?:{self.app.trade_manager.is_trading_time(current_time)}")
+
+            # Skip non-trading hours
+            if not self.app.trade_manager.is_trading_time(current_time):
+                current_time += timedelta(hours=1)
+                continue
+
             candles = []
 
-            next_hour = start + timedelta(hours=1)
+            next_hour = current_time + timedelta(hours=1)
             if next_hour > end:
                 next_hour = end
+            self.log(True, "D", None, f"    current_time: {current_time} | next_hour: {next_hour}")
 
-            start_unix_time = str(int(start.timestamp()))
+            start_unix_time = str(int(current_time.timestamp()))
             end_unix_time = str(int(next_hour.timestamp()))
-            self.log(True, "D", None, f"Fetching candles from {start} to {next_hour}")
+            self.log(True, "D", None, f"    Fetching candles from {current_time} to {next_hour}")
 
             response = self.client.get_candles(product_id=product_id, start=start_unix_time,
                                                end=end_unix_time, granularity=granularity)
             if response and 'candles' in response:
                 candles.extend(response['candles'])
-            self.log(True, "I", "candles", candles)
+            # self.log(True, "I", "candles", candles)
 
             self.save_futures_candles_to_db(product_id, candles)
 
-            start = next_hour
-            time.sleep(5)
+            # Only add the next_hour if we're getting historical data
+            if historical:
+                current_time = next_hour
+
+            time.sleep(sleep)
 
     # Example function to save candle data to the database
     def save_futures_candles_to_db(self, product_id, candles):
@@ -546,7 +590,8 @@ class CoinbaseAdvAPI:
                     volume = float(candle['volume'])
 
                     # Check if the record already exists
-                    existing_candle = FuturesCandleData.query.filter_by(product_id=product_id, start_time=start_time).first()
+                    existing_candle = FuturesCandleData.query.filter_by(product_id=product_id,
+                                                                        start_time=start_time).first()
 
                     if existing_candle:
                         # Update the existing record

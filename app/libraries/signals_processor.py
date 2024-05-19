@@ -107,9 +107,11 @@ class SignalProcessor:
             try:
                 future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(
                     relevant_future_product.product_id)
-                if 'pricebooks' in future_bid_ask_price:
-                    future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
-                    future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
+                print("future_bid_ask_price:", future_bid_ask_price, type(future_bid_ask_price))
+                if future_bid_ask_price['pricebooks']:
+                    if 'pricebooks' in future_bid_ask_price:
+                        future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']
+                        future_ask_price = future_bid_ask_price['pricebooks'][0]['asks'][0]['price']
             except AttributeError as e:
                 self.log(True, "E",
                          "Unable to get Future Bid and Ask Prices", "AttributeError:", e)
@@ -553,7 +555,7 @@ class SignalProcessor:
         elif (group2['direction'] == group3['direction'] and
               ((group2['strength'] == 'MODERATE' and group3['strength'] == 'STRONG') or
                (group2['strength'] == 'STRONG' and group3['strength'] == 'STRONG'))
-            ):
+        ):
             msg = (f"Mid-level and Lower are same direction with Mid-level TF Strength of: {group3['strength']}"
                    f"\n and Lower TF Strength of: {group2['strength']}")
             trading_permitted = True

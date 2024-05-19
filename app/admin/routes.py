@@ -3,7 +3,7 @@ from flask_admin import expose, AdminIndexView
 from flask_login import current_user
 from app.models import and_
 from app.models.signals import AuroxSignal
-from app.models.futures import FuturePosition, FuturesOrder
+from app.models.futures import FuturePosition, FuturesOrder, FuturesCandleData
 
 # TODO: Add ajax updates for signals (2-3 min) and orders (1 min)
 
@@ -46,7 +46,8 @@ class MyAdminIndexView(AdminIndexView):
                            latest_signals=latest_signals,
                            latest_positions=latest_positions,
                            latest_orders=latest_orders,
-                           profit_loss_data=profit_loss_data
+                           profit_loss_data=profit_loss_data,
+                           app=current_app
                            )
         # return super(MyAdminIndexView, self).index()
 
@@ -79,7 +80,7 @@ class MyAdminIndexView(AdminIndexView):
         return jsonify(profit_loss_data)
 
     @expose('/orders')
-    def get_orders_for_tv(self):
+    def get_orders_for_chart(self):
         print(":get_orders_for_tv:")
         # Query the FuturesOrder model
         # orders = FuturesOrder.query.all()
@@ -109,3 +110,19 @@ class MyAdminIndexView(AdminIndexView):
 
         # Return the JSON response
         return jsonify(orders_data)
+
+    @expose('/candles')
+    def get_candles_for_chart(self):
+        candles = FuturesCandleData.query.limit(100).all()
+        result = []
+        for candle in candles:
+            result.append({
+                'product_id': candle.product_id,
+                'start_time': candle.start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'low': candle.low,
+                'high': candle.high,
+                'open': candle.open,
+                'close': candle.close,
+                'volume': candle.volume
+            })
+        return jsonify(result)

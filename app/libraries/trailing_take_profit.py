@@ -130,7 +130,7 @@ class TrailingTakeProfit:
             # Check if the market is open or not
             now = datetime.now(pytz.utc)
 
-            if self.tm.is_trading_time(now):
+            if self.tm.is_trading_time(now, "run_trailing_take_profit"):
                 bid_ask = self.cbapi.get_current_bid_ask_prices(product_id)
                 bid_price = bid_ask['pricebooks'][0]['bids'][0]['price']
                 ask_price = bid_ask['pricebooks'][0]['asks'][0]['price']

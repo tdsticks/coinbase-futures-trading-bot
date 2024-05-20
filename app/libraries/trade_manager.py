@@ -118,8 +118,8 @@ class TradeManager:
 
         create_dca_orders()
 
-    def is_trading_time(self, current_time):
-        self.log(True, "I", None, "---> Checking for open market...")
+    def is_trading_time(self, current_time, method=None):
+        self.log(True, "I", None, f"---> Checking for open market... method: {method}")
         """
             Check if the current time is within trading hours.
             Trading hours are Sunday 6 PM to Friday 5 PM ET, with a break from 5 PM to 6 PM daily.
@@ -132,25 +132,20 @@ class TradeManager:
             current_time = pytz.utc.localize(current_time).astimezone(eastern)
         else:
             current_time = current_time.astimezone(eastern)
-        # print(f"    current_time_only: {current_time}")
 
         # Check day of the week (Monday is 0 and Sunday is 6)
         weekday = current_time.weekday()
-        # print(f"    weekday: {weekday}")
 
         # Get the current time as a time object
         current_time_only = current_time.time()
-        # print(f"    current_time_only: {current_time_only}")
 
         # Define trading break time
         break_start = time(17, 0, 0)  # 5 PM
         break_end = time(18, 0, 0)  # 6 PM
-        # print(f"    break_start: {break_start} break_end: {break_end}")
 
         # Check if today is a holiday
         us_holidays = holidays.country_holidays('US')
         is_holiday = current_time.date() in us_holidays
-        # print(f"    is_holiday: {is_holiday}")
 
         # Trading conditions
         is_during_week = 0 <= weekday <= 4  # Monday to Friday
@@ -160,6 +155,11 @@ class TradeManager:
         is_friday_before_5pm = weekday == 4 and current_time_only < break_start  # Before 5 PM on Friday
         is_saturday = weekday == 5  # Saturday
         is_sunday_before_6pm = weekday == 6 and current_time_only < time(18, 0, 0)  # Before 6 PM on Sunday
+        # print(f"    current_time_only: {current_time}")
+        # print(f"    weekday: {weekday}")
+        # print(f"    current_time_only: {current_time_only}")
+        # print(f"    break_start: {break_start} break_end: {break_end}")
+        # print(f"    is_holiday: {is_holiday}")
         # print(f"    is_during_week: {is_during_week}")
         # print(f"    is_before_break: {is_before_break}")
         # print(f"    is_after_break: {is_after_break}")
@@ -168,18 +168,18 @@ class TradeManager:
 
         # Determine if it's a valid trading time
         if is_holiday:
-            self.log(True, "W", None, " >>> Futures market is CLOSED (Holiday). <<<")
+            self.log(True, "W", None, f" >>> Futures market is CLOSED (Holiday). method: {method} <<<")
             return False
         if is_saturday or is_sunday_before_6pm:
-            self.log(True, "W", None, " >>> Futures market is CLOSED (Weekend). <<<")
+            self.log(True, "W", None, f" >>> Futures market is CLOSED (Weekend).method: {method} <<<")
             return False
         if is_during_week and (is_before_break or is_after_break):
-            self.log(True, "I", None, " >>> Futures market is OPEN! <<<")
+            self.log(True, "I", None, f" >>> Futures market is OPEN! method: {method} <<<")
             return True
         if is_sunday_after_6pm or is_friday_before_5pm:
-            self.log(True, "I", None, " >>> Futures market is OPEN! <<<")
+            self.log(True, "I", None, f" >>> Futures market is OPEN! method: {method} <<<")
             return True
-        self.log(True, "W", None, " >>> Futures market is CLOSED. <<<")
+        self.log(True, "W", None, f" >>> Futures market is CLOSED. method: {method} <<<")
         return False
 
     def check_trading_conditions(self):

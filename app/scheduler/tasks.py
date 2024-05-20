@@ -31,11 +31,11 @@ def setup_scheduler(app):
         app.custom_log.log(True, "D", None, ":get_balance_summary_job:")
 
         now = datetime.now(pytz.utc)
-        # print("Is trading time?", app.trade_manager.is_trading_time(now))
+        # print("Is trading time?", app.trade_manager.is_trading_time(now, "get_balance_summary_job"))
 
         with app.app_context():
             # Check if the market is open or not
-            if app.trade_manager.is_trading_time(now):
+            if app.trade_manager.is_trading_time(now, "get_balance_summary_job"):
                 # Balance Summary get and store
                 futures_balance = app.cb_adv_api.get_balance_summary()
                 # pp(futures_balance)
@@ -48,11 +48,11 @@ def setup_scheduler(app):
         app.custom_log.log(True, "D", None, msg1=":get_coinbase_futures_products_job:")
 
         now = datetime.now(pytz.utc)
-        # print("Is trading time?",  app.trade_manager.is_trading_time(now))
+        # print("Is trading time?",  app.trade_manager.is_trading_time(now, "get_coinbase_futures_products_job"))
 
         with app.app_context():
             # Check if the market is open or not
-            if app.trade_manager.is_trading_time(now):
+            if app.trade_manager.is_trading_time(now, "get_coinbase_futures_products_job"):
                 list_future_products = app.cb_adv_api.list_products("FUTURE")
                 # pp(list_future_products)
                 app.cb_adv_api.store_btc_futures_products(list_future_products)
@@ -69,7 +69,7 @@ def setup_scheduler(app):
 
         with app.app_context():
             # Check if the market is open or not
-            if app.trade_manager.is_trading_time(now):
+            if app.trade_manager.is_trading_time(now, "check_trading_conditions_job"):
                 app.trade_manager.check_trading_conditions()
 
     @scheduler.task('interval', id='orders', seconds=future_orders_time, misfire_grace_time=900)
@@ -104,7 +104,7 @@ def setup_scheduler(app):
                 if len(orders['orders']) > 0:
                     app.cb_adv_api.store_or_update_orders_from_api(orders)
 
-        if app.trade_manager.is_trading_time(now):
+        if app.trade_manager.is_trading_time(now, "list_and_store_future_orders_job"):
             with app.app_context():
                 curr_month = app.cb_adv_api.get_current_short_month_uppercase()
                 next_month = app.cb_adv_api.get_next_short_month_uppercase()

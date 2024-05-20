@@ -107,7 +107,7 @@ class SignalProcessor:
             try:
                 future_bid_ask_price = self.cb_adv_api.get_current_bid_ask_prices(
                     relevant_future_product.product_id)
-                print("future_bid_ask_price:", future_bid_ask_price, type(future_bid_ask_price))
+                # print("future_bid_ask_price:", future_bid_ask_price, type(future_bid_ask_price))
                 if future_bid_ask_price['pricebooks']:
                     if 'pricebooks' in future_bid_ask_price:
                         future_bid_price = future_bid_ask_price['pricebooks'][0]['bids'][0]['price']

@@ -49,7 +49,7 @@ class ListOrdersWebsocket:
             # Check if the market is open or not
             now = datetime.now(pytz.utc)
 
-            if self.tm.is_trading_time(now):
+            if self.tm.is_trading_time(now, "run_websocket"):
                 try:
                     print("Opening client...")
                     client.open()

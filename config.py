@@ -40,7 +40,7 @@ class Config:
 
     # Schedule Timers
     #   Time is measured in seconds (60 seconds = 1 min, etc)
-    BALANCE_SUMMARY_TIME = 125
+    BALANCE_SUMMARY_TIME = 120
     COINBASE_FUTURES_PRODUCTS_TIME = 600
     TRADING_CONDITIONS_TIME = 40  # This is the main job that opens and checks trading
     FUTURE_ORDERS_TIME = 45  # Get the future orders and store in the DB

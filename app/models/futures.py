@@ -38,7 +38,7 @@ class AccountBalanceSummary(db.Model):
     futures_buying_power = db.Column(db.Float, nullable=True)
     initial_margin = db.Column(db.Float, nullable=True)
     liquidation_buffer_amount = db.Column(db.Float, nullable=True)
-    liquidation_buffer_percentage = db.Column(db.Integer, nullable=True)
+    liquidation_buffer_percentage = db.Column(db.Float, nullable=True)
     liquidation_threshold = db.Column(db.Float, nullable=True)
     total_open_orders_hold_amount = db.Column(db.Float, nullable=True)
     total_usd_balance = db.Column(db.Float, nullable=True)

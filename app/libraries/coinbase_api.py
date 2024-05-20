@@ -90,74 +90,70 @@ class CoinbaseAdvAPI:
 
     def store_futures_balance_summary(self, data):
         # print(':store_futures_balance_summary:')
-        self.log(True, "D", None,
-                 ":store_futures_balance_summary:")
+        self.log(True, "D", None, ":store_futures_balance_summary:")
 
         balance_summary_data = data['balance_summary']
         # pp(balance_summary_data)
 
         with self.app.app_context():  # Push an application context
-            try:
-                # Try to find the existing balance summary, assuming only one record exists
-                existing_balance_summary = AccountBalanceSummary.query.limit(1).all()
-                # print("existing_balance_summary:", existing_balance_summary)
+            # try:
+            # Try to find the existing balance summary, assuming only one record exists
+            existing_balance_summary = AccountBalanceSummary.query.limit(1).all()
+            # print("existing_balance_summary:", existing_balance_summary)
 
-                if existing_balance_summary:
-                    # Update existing record
-                    existing_balance_summary[0].available_margin = float(
-                        balance_summary_data['available_margin']['value'])
-                    existing_balance_summary[0].cbi_usd_balance = float(
-                        balance_summary_data['cbi_usd_balance']['value'])
-                    existing_balance_summary[0].cfm_usd_balance = float(
-                        balance_summary_data['cfm_usd_balance']['value'])
-                    existing_balance_summary[0].daily_realized_pnl = float(
-                        balance_summary_data['daily_realized_pnl']['value'])
-                    existing_balance_summary[0].futures_buying_power = float(
-                        balance_summary_data['futures_buying_power']['value'])
-                    existing_balance_summary[0].initial_margin = float(balance_summary_data['initial_margin']['value'])
-                    existing_balance_summary[0].liquidation_buffer_amount = float(
-                        balance_summary_data['liquidation_buffer_amount']['value'])
-                    existing_balance_summary[0].liquidation_buffer_percentage = int(
-                        balance_summary_data['liquidation_buffer_percentage'])
-                    existing_balance_summary[0].liquidation_threshold = float(
-                        balance_summary_data['liquidation_threshold']['value'])
-                    existing_balance_summary[0].total_open_orders_hold_amount = float(
-                        balance_summary_data['total_open_orders_hold_amount']['value'])
-                    existing_balance_summary[0].total_usd_balance = float(
-                        balance_summary_data['total_usd_balance']['value'])
-                    existing_balance_summary[0].unrealized_pnl = float(balance_summary_data['unrealized_pnl']['value'])
-                    # print("Updated existing balance summary")
-                else:
-                    # Create new record if it does not exist
-                    new_balance_summary = AccountBalanceSummary(
-                        available_margin=float(balance_summary_data['available_margin']['value']),
-                        cbi_usd_balance=float(balance_summary_data['cbi_usd_balance']['value']),
-                        cfm_usd_balance=float(balance_summary_data['cfm_usd_balance']['value']),
-                        daily_realized_pnl=float(balance_summary_data['daily_realized_pnl']['value']),
-                        futures_buying_power=float(balance_summary_data['futures_buying_power']['value']),
-                        initial_margin=float(balance_summary_data['initial_margin']['value']),
-                        liquidation_buffer_amount=float(balance_summary_data['liquidation_buffer_amount']['value']),
-                        liquidation_buffer_percentage=int(balance_summary_data['liquidation_buffer_percentage']),
-                        liquidation_threshold=float(balance_summary_data['liquidation_threshold']['value']),
-                        total_open_orders_hold_amount=float(
-                            balance_summary_data['total_open_orders_hold_amount']['value']),
-                        total_usd_balance=float(balance_summary_data['total_usd_balance']['value']),
-                        unrealized_pnl=float(balance_summary_data['unrealized_pnl']['value']),
-                    )
-                    # self.app.db.session.add(new_balance_summary)
-                    db.session.add(new_balance_summary)
-                    # print("Stored new balance summary")
+            if existing_balance_summary:
+                # Update existing record
+                existing_balance_summary[0].available_margin = float(
+                    balance_summary_data['available_margin']['value'])
+                existing_balance_summary[0].cbi_usd_balance = float(
+                    balance_summary_data['cbi_usd_balance']['value'])
+                existing_balance_summary[0].cfm_usd_balance = float(
+                    balance_summary_data['cfm_usd_balance']['value'])
+                existing_balance_summary[0].daily_realized_pnl = float(
+                    balance_summary_data['daily_realized_pnl']['value'])
+                existing_balance_summary[0].futures_buying_power = float(
+                    balance_summary_data['futures_buying_power']['value'])
+                existing_balance_summary[0].initial_margin = float(balance_summary_data['initial_margin']['value'])
+                existing_balance_summary[0].liquidation_buffer_amount = float(
+                    balance_summary_data['liquidation_buffer_amount']['value'])
+                existing_balance_summary[0].liquidation_buffer_percentage = float(
+                    balance_summary_data['liquidation_buffer_percentage'])
+                existing_balance_summary[0].liquidation_threshold = float(
+                    balance_summary_data['liquidation_threshold']['value'])
+                existing_balance_summary[0].total_open_orders_hold_amount = float(
+                    balance_summary_data['total_open_orders_hold_amount']['value'])
+                existing_balance_summary[0].total_usd_balance = float(
+                    balance_summary_data['total_usd_balance']['value'])
+                existing_balance_summary[0].unrealized_pnl = float(balance_summary_data['unrealized_pnl']['value'])
+                # print("Updated existing balance summary")
+            else:
+                # Create new record if it does not exist
+                new_balance_summary = AccountBalanceSummary(
+                    available_margin=float(balance_summary_data['available_margin']['value']),
+                    cbi_usd_balance=float(balance_summary_data['cbi_usd_balance']['value']),
+                    cfm_usd_balance=float(balance_summary_data['cfm_usd_balance']['value']),
+                    daily_realized_pnl=float(balance_summary_data['daily_realized_pnl']['value']),
+                    futures_buying_power=float(balance_summary_data['futures_buying_power']['value']),
+                    initial_margin=float(balance_summary_data['initial_margin']['value']),
+                    liquidation_buffer_amount=float(balance_summary_data['liquidation_buffer_amount']['value']),
+                    liquidation_buffer_percentage=int(balance_summary_data['liquidation_buffer_percentage']),
+                    liquidation_threshold=float(balance_summary_data['liquidation_threshold']['value']),
+                    total_open_orders_hold_amount=float(
+                        balance_summary_data['total_open_orders_hold_amount']['value']),
+                    total_usd_balance=float(balance_summary_data['total_usd_balance']['value']),
+                    unrealized_pnl=float(balance_summary_data['unrealized_pnl']['value']),
+                )
+                db.session.add(new_balance_summary)
+                # print("Stored new balance summary")
 
-                # Commit the changes to the database
-                # self.app.db.session.commit()
-                db.session.commit()
-                # print("Balance summary updated or created successfully.")
-            except Exception as e:
-                self.log(True, "E",
-                         "Failed to add/update balance summary",
-                         balance_summary_data, e)
-                # self.app.db.session.rollback()
-                db.session.rollback()
+            # Commit the changes to the database
+            db.session.commit()
+            # print("Balance summary updated or created successfully.")
+            # except Exception as e:
+            #     self.log(True, "E",
+            #              "Failed to add/update balance summary",
+            #              balance_summary_data, e)
+            #     db.session.rollback()
         # print("Balance summary stored")
 
     def get_product(self, product_id="BTC-USDT"):
@@ -503,7 +499,7 @@ class CoinbaseAdvAPI:
         self.log(True, "D", None, f"    start: {start}, end: {end}")
 
         candles_sleep = self.app.config['CANDLES_SLEEP']
-        self.log(True, "D", None, f"    candles_sleep:{candles_sleep}")
+        self.log(True, "D", None, f"    candles_sleep: {candles_sleep} seconds")
 
         self.get_and_store_candles(product_id=product_id,
                                    start=start,
@@ -515,8 +511,8 @@ class CoinbaseAdvAPI:
         self.log(True, "I", None, ":threaded_save_historical_candles:")
 
         product_id = "BIT-31MAY24-CDE"
-        start = datetime(year=2024, month=5, day=17, hour=0)
-        end = datetime(year=2024, month=5, day=17, hour=23)
+        start = datetime(year=2024, month=5, day=19, hour=18)
+        end = datetime(year=2024, month=5, day=19, hour=20)
         # start = datetime(year=2024, month=5, day=16)
         # end = datetime(year=2024, month=5, day=17)
         self.get_and_store_candles(product_id=product_id,
@@ -539,13 +535,15 @@ class CoinbaseAdvAPI:
             end = end
         self.log(True, "D", None, f"    start: {start}, end: {end}")
 
+        now = datetime.now(pytz.utc)  # For the is_trading_time method
+
         current_time = start
         while current_time < end:
             # print(f"{current_time} < {end}")
             # print(f"    is_trading_time?:{self.app.trade_manager.is_trading_time(current_time)}")
 
             # Skip non-trading hours
-            if not self.app.trade_manager.is_trading_time(current_time):
+            if not self.app.trade_manager.is_trading_time(now, "get_and_store_candles"):
                 current_time += timedelta(hours=1)
                 continue
 
@@ -564,7 +562,7 @@ class CoinbaseAdvAPI:
                                                end=end_unix_time, granularity=granularity)
             if response and 'candles' in response:
                 candles.extend(response['candles'])
-            # self.log(True, "I", "candles", candles)
+            self.log(True, "I", "candles count:", len(candles))
 
             self.save_futures_candles_to_db(product_id, candles)
 
@@ -579,9 +577,9 @@ class CoinbaseAdvAPI:
         self.log(True, "D", None, ":save_futures_candles_to_db:")
 
         with self.app.app_context():
-            # for candle in reversed(candles['candles']):
             for candle in reversed(candles):
                 try:
+                    # print(" candle:", candle)
                     start_time = datetime.fromtimestamp(int(candle['start']))
                     low = float(candle['low'])
                     high = float(candle['high'])

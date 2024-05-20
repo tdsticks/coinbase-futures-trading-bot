@@ -49,6 +49,7 @@ class Config:
     CANDLES_SLEEP = 60  # How often do we get the candles for our product
 
     # Dashboard template (html) Timer
+    UPDATE_CHART_TIME = 10000  # in ms 1000 = 1 second
     UPDATE_PROFIT_LOSS_TIME = 10000  # in ms 1000 = 1 second
 
     ###############################
@@ -86,7 +87,7 @@ class Config:
 
     # NOTE: ONLY SET THIS TO MANUALLY OVERRIDE THE TAKE PROFIT PRICE
     #   I'm still seeing issues with Coinbase's avg_entry_price from the positions
-    #   API data, so sometime we may need to override the take profit price
+    #   API data, so sometimes we may need to override the take profit price
     #   DON'T LEAVE THIS ON AS THE NEXT TRADE WILL BE DIFFERENT
     # TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = "62380"
     TAKE_PROFIT_MANUAL_OVERRIDE_PRICE = False  # Needs to be a price as string

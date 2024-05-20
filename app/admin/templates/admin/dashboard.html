@@ -165,121 +165,99 @@
 
 {% block tail_js %}
     {{ super() }}
-{#    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>#}
-    <script type="text/javascript" src="https://d3js.org/d3.v6.min.js"></script>
-    <script type="text/javascript">
+    <script type="module">
+        import * as Plot from "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm";
 
-        // Set up the dimensions and margins of the graph
-        const margin = {top: 20, right: 20, bottom: 30, left: 50},
-              width = 960 - margin.left - margin.right,
-              height = 500 - margin.top - margin.bottom;
+        function updateChart() {
+            console.log(":updateChart:")
 
-        // Parse the date / time
-        const parseDate = d3.timeParse("%Y-%m-%d %H:%M:%S");
+            // Create a new fetch request
+            fetch('/admin/candles')
+                .then(function (response) {
+                    return response.json();
+                }).then(function (data) {
+                {#console.log(data, typeof(data)); // this will be a string#}
 
-        // Set up the scales
-        const x = d3.scaleTime().range([0, width]);
-        const y = d3.scaleLinear().range([height, 0]);
+                let candles_data = null;
 
-        // Define the axes
-        const xAxis = d3.axisBottom(x);
-        const yAxis = d3.axisLeft(y);
+                if (data && data.length > 0) {
+                    {#console.log("Data fetched:", data);#}
+                    candles_data = data.map(d => {
+                        {#console.log("d:", d);#}
+                        return {
+                            {#start_time: new Date(d.start_time),#}
+                            start_time: d.start_time,
+                            low: +d.low,
+                            high: +d.high,
+                            open_: +d.open,
+                            close_: +d.close,
+                            {#volume: +d.volume#}
+                        };
+                    });
+                    {#console.log("candles_data:", candles_data);#}
 
-        // Define the candlestick chart
-        const candlestick = d3.select("#chart")
-            .append("svg")
-            .attr("width", width + margin.left + margin.right)
-            .attr("height", height + margin.top + margin.bottom)
-            .append("g")
-            .attr("transform", `translate(${margin.left},${margin.top})`);
+                    draw_plot(candles_data);
 
-        // Get the data
-        d3.json("/admin/candles").then(data => {
-            data.forEach(d => {
-                d.start_time = parseDate(d.start_time);
-                d.low = +d.low;
-                d.high = +d.high;
-                d.open = +d.open;
-                d.close = +d.close;
+                } else {
+                    console.error('No data found or data is empty.');
+                }
+            }).catch(error => {
+                console.error('Error fetching data:', error);
             });
 
-            // Filter the data to show only the last 3 days initially
-            const threeDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-            const initialData = data.filter(d => d.start_time >= threeDaysAgo);
-            console.log("threeDaysAgo:", threeDaysAgo)
-            console.log("initialData:", initialData)
+            let draw_plot = function (candles) {
+                let plot = Plot.plot({
+                    inset: 6,
+                    width: 1080,
+                    height: 500,
+                    x: {
+                        label: "Date / Time",
+                        {#tickFormat: "%-m/%-d",#}
+                    },
+                    y: {
+                        grid: true,
+                        label: "Price"
+                    },
+                    color: {
+                        domain: [-1, 0, 1],
+                        {#range: ["#4daf4a", "#999999", "#e41a1c"]#}
+                        range: ["#e41a1c", "#999999", "#4daf4a"]
+                    },
+                    marks: [
+                        Plot.ruleX(candles, {
+                            x: "start_time",
+                            y1: "low",
+                            y2: "high",
+                        }),
+                        Plot.ruleX(candles, {
+                            x: "start_time",
+                            y1: "open_",
+                            y2: "close_",
+                            stroke: d => Math.sign(d.close_ - d.open_),
+                            strokeWidth: 1,
+                            strokeLinecap: "round"
+                        })
+                    ]
+                })
+                const div = document.querySelector("#chart");
+                div.append(plot);
+            }
+        }
 
-            // Scale the range of the data
-            x.domain(d3.extent(initialData, d => d.start_time));
-            y.domain([d3.min(initialData, d => d.low), d3.max(initialData, d => d.high)]);
+        updateChart();
 
-            // Scale the range of the data
-            {#x.domain(d3.extent(data, d => d.start_time));#}
-            {#y.domain([d3.min(data, d => d.low), d3.max(data, d => d.high)]);#}
+        {#const update_chart_time = {{ app.config['UPDATE_CHART_TIME'] }}#}
+        {#console.log("update_chart_time:", update_chart_time);#}
 
-            // Add the x-axis
-            candlestick.append("g")
-                .attr("class", "x axis")
-                .attr("transform", `translate(0,${height})`)
-                .call(xAxis);
+        // Refresh the data every 10 seconds
+        {#setInterval(updateChart, update_chart_time);#}
 
-            // Add the y-axis
-            candlestick.append("g")
-                .attr("class", "y axis")
-                .call(yAxis);
+    </script>
 
-            // Add the candlesticks
-            candlestick.selectAll(".candlestick")
-                .data(data)
-                .enter().append("rect")
-                .attr("class", d => d.open > d.close ? "candlestick down" : "candlestick up")
-                .attr("x", d => x(d.start_time) - 2)
-                .attr("y", d => y(Math.max(d.open, d.close)))
-                .attr("width", 4)
-                .attr("height", d => Math.abs(y(d.open) - y(d.close)));
-
-            // Add the wicks
-            candlestick.selectAll(".wick")
-                .data(data)
-                .enter().append("line")
-                .attr("class", "wick")
-                .attr("x1", d => x(d.start_time))
-                .attr("x2", d => x(d.start_time))
-                .attr("y1", d => y(d.high))
-                .attr("y2", d => y(d.low))
-                .attr("stroke", "black");
-         }).catch(error => {
-            console.error('Error fetching data:', error);
-         });
-
-        {#console.log("TradingView:", TradingView);#}
-        {#let widget = new TradingView.widget({#}
-        {#    "container_id": "trading-chart",#}
-        {#    "autosize": true,#}
-        {#    "symbol": "BINANCE:BTCUSDT",#}
-        {#    "interval": "15",#}
-        {#    "timezone": "Etc/EST",#}
-        {#    "theme": "dark",#}
-        {#    "style": "1",#}
-        {#    "locale": "en",#}
-        {#    "toolbar_bg": "#f1f3f6",#}
-        {#    "enable_publishing": false,#}
-        {#    "hide_legend": false,#}
-        {#    "save_image": false,#}
-        {#    "show_popup_button": true,#}
-        {#    "popup_width": "1000",#}
-        {#    "popup_height": "650"#}
-        {# }); #}
-
-        {#widget.ready(function () {#}
-        {#    fetch('/admin/orders')#}
-        {#        .then(response => response.json())#}
-        {#        .then(data => {#}
-        {#            console.log("data:", data)#}
-        {#        });#}
-        {# }); #}
-
+    <script type="text/javascript">
         function updateProfitLossData() {
+            console.log(":updateProfitLossData:")
+
             fetch('/admin/latest_profit_loss_data')
                 .then(response => response.json())
                 .then(data => {
@@ -307,11 +285,163 @@
                 });
         }
 
-        update_profit_loss_time = {{ app.config['UPDATE_PROFIT_LOSS_TIME'] }}
+        const update_profit_loss_time = {{ app.config['UPDATE_PROFIT_LOSS_TIME'] }}
         console.log("update_profit_loss_time:", update_profit_loss_time);
 
         // Refresh the data every 10 seconds
         setInterval(updateProfitLossData, update_profit_loss_time);
 
     </script>
+
+{#    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script> #}
+{#    <script type="text/javascript" src="https://d3js.org/d3.v6.min.js"></script>#}
+{#    <script type="text/javascript">#}
+{#        // Set up the dimesnsions and margins of the graph#}
+{#        const margin = {top: 20, right: 20, bottom: 30, left: 50},#}
+{#              width = 1080 - margin.left - margin.right,#}
+{#              height = 500 - margin.top - margin.bottom;#}
+{##}
+{#        // Parse the date / time#}
+{#        const parseDate = d3.timeParse("%Y-%m-%d %H:%M:%S");#}
+{##}
+{#        // Set up the scales#}
+{#        const x = d3.scaleTime().range([0, width]);#}
+{#        const y = d3.scaleLinear().range([height, 0]);#}
+{##}
+{#        // Define the axes#}
+{#        const xAxis = d3.axisBottom(x).tickFormat(d3.timeFormat("%Y-%m-%d %H:%M"));#}
+{#        const yAxis = d3.axisLeft(y);#}
+{##}
+{#        // Define the candlestick chart#}
+{#        const candlestick = d3.select("#chart")#}
+{#            .append("svg")#}
+{#            .attr("width", width + margin.left + margin.right)#}
+{#            .attr("height", height + margin.top + margin.bottom)#}
+{#            .append("g")#}
+{#            .attr("transform", `translate(${margin.left},${margin.top})`);#}
+{##}
+{#        // Get the data#}
+{#        d3.json("/admin/candles").then(data => {#}
+{#            if (data && data.length > 0) {#}
+{#                console.log("Data fetched:", data);#}
+{#                data.forEach(d => {#}
+{#                    d.start_time = parseDate(d.start_time);#}
+{#                    d.low = +d.low;#}
+{#                    d.high = +d.high;#}
+{#                    d.open = +d.open;#}
+{#                    d.close = +d.close;#}
+{#                });#}
+{##}
+{#                // Filter the data to show only the last 3 days initially#}
+{#                const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);#}
+{#                const initialData = data.filter(d => d.start_time >= thirtyDaysAgo);#}
+{#                console.log("thirtyDaysAgo:", thirtyDaysAgo);#}
+{#                console.log("Initial data for the last 3 days:", initialData);#}
+{##}
+{#                // Scale the range of the data#}
+{#                x.domain(d3.extent(initialData, d => d.start_time));#}
+{#                y.domain([d3.min(initialData, d => d.low), d3.max(initialData, d => d.high)]);#}
+{##}
+{#                // Add the x-axis#}
+{#                candlestick.append("g")#}
+{#                    .attr("class", "x axis")#}
+{#                    .attr("transform", `translate(0,${height})`)#}
+{#                    .call(xAxis);#}
+{##}
+{#                // Add the y-axis#}
+{#                candlestick.append("g")#}
+{#                    .attr("class", "y axis")#}
+{#                    .call(yAxis);#}
+{##}
+{#                // Add the candlesticks#}
+{#                candlestick.selectAll(".candlestick")#}
+{#                    .data(initialData)#}
+{#                    .enter().append("rect")#}
+{#                    .attr("class", d => d.open > d.close ? "candlestick down" : "candlestick up")#}
+{#                    .attr("x", d => x(d.start_time) - 2)#}
+{#                    .attr("y", d => y(Math.max(d.open, d.close)))#}
+{#                    .attr("width", 4)#}
+{#                    .attr("height", d => Math.abs(y(d.open) - y(d.close)));#}
+{##}
+{#                // Add the wicks#}
+{#                candlestick.selectAll(".wick")#}
+{#                    .data(initialData)#}
+{#                    .enter().append("line")#}
+{#                    .attr("class", "wick")#}
+{#                    .attr("x1", d => x(d.start_time))#}
+{#                    .attr("x2", d => x(d.start_time))#}
+{#                    .attr("y1", d => y(d.high))#}
+{#                    .attr("y2", d => y(d.low))#}
+{#                    .attr("stroke", "black");#}
+{#            } else {#}
+{#                console.error('No data found or data is empty.');#}
+{#            }#}
+{#         }).catch(error => {#}
+{#            console.error('Error fetching data:', error);#}
+{#         });#}
+{##}
+{##}
+{#        console.log("TradingView:", TradingView);#}
+{#        let widget = new TradingView.widget({#}
+{#            "container_id": "trading-chart",#}
+{#            "autosize": true,#}
+{#            "symbol": "BINANCE:BTCUSDT",#}
+{#            "interval": "15",#}
+{#            "timezone": "Etc/EST",#}
+{#            "theme": "dark",#}
+{#            "style": "1",#}
+{#            "locale": "en",#}
+{#            "toolbar_bg": "#f1f3f6",#}
+{#            "enable_publishing": false,#}
+{#            "hide_legend": false,#}
+{#            "save_image": false,#}
+{#            "show_popup_button": true,#}
+{#            "popup_width": "1000",#}
+{#            "popup_height": "650"#}
+{#         }); #}
+{##}
+{#        widget.ready(function () {#}
+{#            fetch('/admin/orders')#}
+{#                .then(response => response.json())#}
+{#                .then(data => {#}
+{#                    console.log("data:", data)#}
+{#                });#}
+{#         }); #}
+{##}
+{#        function updateProfitLossData() {#}
+{#            fetch('/admin/latest_profit_loss_data')#}
+{#                .then(response => response.json())#}
+{#                .then(data => {#}
+{#                    document.getElementById('product_id').innerText = data.product_id;#}
+{#                    document.getElementById('side').innerText = data.side;#}
+{#                    document.getElementById('avg_filled_price').innerText = `$${data.avg_filled_price}`;#}
+{#                    document.getElementById('current_price').innerText = `$${data.current_price}`;#}
+{#                    document.getElementById('number_of_contracts').innerText = `${data.number_of_contracts}`;#}
+{##}
+{#                    console.log(data.calc_percentage, typeof(data.calc_percentage));#}
+{##}
+{#                    const statusElement = document.getElementById('status');#}
+{#                    let statusText;#}
+{#                    if (data.calc_percentage >= 1) {#}
+{#                        statusText = `Take profit at 1% or higher: ${data.calc_percentage}%`;#}
+{#                    } else if (data.calc_percentage >= 0.5) {#}
+{#                        statusText = `Ready to take profit: ${data.calc_percentage}%`;#}
+{#                    } else if (data.calc_percentage >= 0) {#}
+{#                        statusText = `Neutral: ${data.calc_percentage}%`;#}
+{#                    } else {#}
+{#                        statusText = `Trade negative: ${data.calc_percentage}%`;#}
+{#                    }#}
+{#                    statusElement.innerText = statusText;#}
+{#                    document.getElementById('calc_profit_or_loss').innerText = (`$${data.calc_profit_or_loss}`).replace("$-", "-$");#}
+{#                });#}
+{#        }#}
+{##}
+{#        update_profit_loss_time = {{ app.config['UPDATE_PROFIT_LOSS_TIME'] }}#}
+{#        console.log("update_profit_loss_time:", update_profit_loss_time);#}
+{##}
+{#        // Refresh the data every 10 seconds#}
+{#        setInterval(updateProfitLossData, update_profit_loss_time);#}
+{##}
+{#    </script>#}
+
 {% endblock %}

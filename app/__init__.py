@@ -90,8 +90,9 @@ def create_app(config_class=Config):
     # Run the Coinbase Websocket for trailing take profit
     # This will start the WebSocket client in a separate thread
     # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_cb_wsclient)
-    # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_trailing_take_profit)
     # websocket_thread = threading.Thread(target=app.list_orders_websocket.run_websocket)
+
+    # websocket_thread = threading.Thread(target=app.trailing_take_profit.run_trailing_take_profit)
 
     # websocket_thread = threading.Thread(target=app.cb_adv_api.threaded_save_historical_candles)
     websocket_thread = threading.Thread(target=app.cb_adv_api.threaded_save_current_candles)

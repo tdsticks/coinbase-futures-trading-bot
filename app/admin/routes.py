@@ -113,7 +113,7 @@ class MyAdminIndexView(AdminIndexView):
 
     @expose('/candles')
     def get_candles_for_chart(self):
-        candles = FuturesCandleData.query.limit(100).all()
+        candles = FuturesCandleData.query.limit(10000).all()
         result = []
         for candle in candles:
             result.append({

@@ -9,7 +9,7 @@ pytz==2024.1
 requests>=2.31.0
 Flask-APScheduler==1.13.1
 # sqlite3-to-mysql==2.1.9 # Don't need this unless converting
-PyMySQL==1.1.0
+PyMySQL==1.1.1
 Flask-Mail==0.9.1
 flask-login==0.6.3
 flask-bcrypt==1.0.1
